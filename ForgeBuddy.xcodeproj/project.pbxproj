@@ -1,0 +1,328 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3F5406C274DA53A7598981B8 /* RecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968EE09BAA667E379D39244E /* RecorderService.swift */; };
+		83B859F5B31316441B85895A /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4FD261C32286078627DEB /* QRScannerView.swift */; };
+		88BC17161ABC652C800C3E06 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459AA93AD02E6B2B44B550EC /* Models.swift */; };
+		9A8A9A583999B76CA096C03C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEA3E8AAB0ED4F300A471E47 /* Theme.swift */; };
+		EAB9F8BDBCE246215C11018A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EB6DF84789D2AB38D1CE60E /* ContentView.swift */; };
+		F6B64EC682F7F8404946EB85 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABD964B12D63CEAD25E3F97 /* AppModel.swift */; };
+		F853AE72610BD4DA11905736 /* BuddyAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CB7799B2B13174F785F656 /* BuddyAudioPlayer.swift */; };
+		FDC482A5DE8C8DE87377E54D /* ForgeBuddyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5694C65DBE906723B58ADDE /* ForgeBuddyApp.swift */; };
+		FDC9AF89D61A4FBAF74742AA /* ForgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74B735E8457519E032D0460 /* ForgeClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		459AA93AD02E6B2B44B550EC /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		5EB6DF84789D2AB38D1CE60E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		968EE09BAA667E379D39244E /* RecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderService.swift; sourceTree = "<group>"; };
+		9ABD964B12D63CEAD25E3F97 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		9AD4FD261C32286078627DEB /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		C5694C65DBE906723B58ADDE /* ForgeBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeBuddyApp.swift; sourceTree = "<group>"; };
+		CA9D96303F75B352176CA698 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		CEA3E8AAB0ED4F300A471E47 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		D2CB7799B2B13174F785F656 /* BuddyAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyAudioPlayer.swift; sourceTree = "<group>"; };
+		E74B735E8457519E032D0460 /* ForgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeClient.swift; sourceTree = "<group>"; };
+		F2F347733D9CDB9FEF2285CC /* ForgeBuddy.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ForgeBuddy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		6DD5A867A123F481F8A6CF65 /* ForgeBuddy */ = {
+			isa = PBXGroup;
+			children = (
+				9ABD964B12D63CEAD25E3F97 /* AppModel.swift */,
+				D2CB7799B2B13174F785F656 /* BuddyAudioPlayer.swift */,
+				5EB6DF84789D2AB38D1CE60E /* ContentView.swift */,
+				C5694C65DBE906723B58ADDE /* ForgeBuddyApp.swift */,
+				E74B735E8457519E032D0460 /* ForgeClient.swift */,
+				CA9D96303F75B352176CA698 /* Info.plist */,
+				459AA93AD02E6B2B44B550EC /* Models.swift */,
+				9AD4FD261C32286078627DEB /* QRScannerView.swift */,
+				968EE09BAA667E379D39244E /* RecorderService.swift */,
+				CEA3E8AAB0ED4F300A471E47 /* Theme.swift */,
+			);
+			path = ForgeBuddy;
+			sourceTree = "<group>";
+		};
+		8D62B344E15344C38432E88E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F2F347733D9CDB9FEF2285CC /* ForgeBuddy.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CBC98C75EB3CC339C43C048E = {
+			isa = PBXGroup;
+			children = (
+				6DD5A867A123F481F8A6CF65 /* ForgeBuddy */,
+				8D62B344E15344C38432E88E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EB62630591C18075746ABCF8 /* ForgeBuddy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F76868213E62EB4BEE9498C9 /* Build configuration list for PBXNativeTarget "ForgeBuddy" */;
+			buildPhases = (
+				C2A357396E2AFD31372437E7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeBuddy;
+			packageProductDependencies = (
+			);
+			productName = ForgeBuddy;
+			productReference = F2F347733D9CDB9FEF2285CC /* ForgeBuddy.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB89805C5428A8B87C6FE37F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					EB62630591C18075746ABCF8 = {
+						DevelopmentTeam = RZM8C5A33N;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 674278182A43D39C219BAC10 /* Build configuration list for PBXProject "ForgeBuddy" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = CBC98C75EB3CC339C43C048E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8D62B344E15344C38432E88E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EB62630591C18075746ABCF8 /* ForgeBuddy */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C2A357396E2AFD31372437E7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6B64EC682F7F8404946EB85 /* AppModel.swift in Sources */,
+				F853AE72610BD4DA11905736 /* BuddyAudioPlayer.swift in Sources */,
+				EAB9F8BDBCE246215C11018A /* ContentView.swift in Sources */,
+				FDC482A5DE8C8DE87377E54D /* ForgeBuddyApp.swift in Sources */,
+				FDC9AF89D61A4FBAF74742AA /* ForgeClient.swift in Sources */,
+				88BC17161ABC652C800C3E06 /* Models.swift in Sources */,
+				83B859F5B31316441B85895A /* QRScannerView.swift in Sources */,
+				3F5406C274DA53A7598981B8 /* RecorderService.swift in Sources */,
+				9A8A9A583999B76CA096C03C /* Theme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		71CBCE299EAB7925CC8D675E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ForgeBuddy/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.forge.buddy;
+				PRODUCT_NAME = "Forge Buddy";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7574E872505168B5B8B825CC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = RZM8C5A33N;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E016C558D029DFE95472B1E2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ForgeBuddy/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.forge.buddy;
+				PRODUCT_NAME = "Forge Buddy";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EF2E57C785A8AB77F497759A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = RZM8C5A33N;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		674278182A43D39C219BAC10 /* Build configuration list for PBXProject "ForgeBuddy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EF2E57C785A8AB77F497759A /* Debug */,
+				7574E872505168B5B8B825CC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F76868213E62EB4BEE9498C9 /* Build configuration list for PBXNativeTarget "ForgeBuddy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71CBCE299EAB7925CC8D675E /* Debug */,
+				E016C558D029DFE95472B1E2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BB89805C5428A8B87C6FE37F /* Project object */;
+}
