@@ -390,7 +390,7 @@ private struct RecordingContent: View {
                     .padding(.top, 18)
             }
 
-            WaveformView(levels: recorder.levels, color: ForgeTheme.green)
+            WaveformView(levels: recorder.levels, color: ForgeTheme.ink)
                 .frame(height: 56)
 
             VStack(spacing: 13) {
@@ -1199,10 +1199,11 @@ struct WaveformView: View {
             HStack(alignment: .center, spacing: spacing) {
                 ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                     RoundedRectangle(cornerRadius: width / 2, style: .continuous)
-                        .fill(color.opacity(0.86))
+                        .fill(color.opacity(0.9))
                         .frame(width: width, height: max(5, proxy.size.height * level))
                 }
             }
+            .animation(.easeOut(duration: 0.08), value: levels)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

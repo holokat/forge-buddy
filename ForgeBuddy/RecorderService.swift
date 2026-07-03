@@ -7,16 +7,20 @@ final class RecorderService: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var elapsedSeconds: Double = 0
     @Published private(set) var transcript = ""
-    @Published private(set) var levels: [CGFloat] = Array(repeating: 0.12, count: 34)
+    @Published private(set) var levels: [CGFloat] = Array(repeating: 0.12, count: 42)
     @Published var errorMessage: String?
     @Published private(set) var statusMessage = "Tap to stop & save"
 
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private var recognitionTask: SFSpeechRecognitionTask?
+    private let liveAudioEngine = AVAudioEngine()
+    private var liveRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var liveRecognitionTask: SFSpeechRecognitionTask?
+    private var fileRecognitionTask: SFSpeechRecognitionTask?
     private var audioRecorder: AVAudioRecorder?
     private var audioURL: URL?
     private var startedAt: Date?
     private var timerTask: Task<Void, Never>?
+    private var isLiveTranscriptionActive = false
 
     func start() async {
         guard !isRecording else { return }
@@ -48,7 +52,12 @@ final class RecorderService: ObservableObject {
             return nil
         }
 
-        let finalTranscript = await transcribe(url: finalURL).trimmingCharacters(in: .whitespacesAndNewlines)
+        await finishLiveTranscription()
+        let liveTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTranscript = liveTranscript.isEmpty
+            ? await transcribe(url: finalURL).trimmingCharacters(in: .whitespacesAndNewlines)
+            : liveTranscript
+
         if finalTranscript.isEmpty && errorMessage == nil {
             errorMessage = "No transcript returned. The audio was saved."
         }
@@ -56,8 +65,8 @@ final class RecorderService: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         audioRecorder = nil
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        fileRecognitionTask?.cancel()
+        fileRecognitionTask = nil
         startedAt = nil
         audioURL = nil
         statusMessage = "Tap to stop & save"
@@ -98,7 +107,7 @@ final class RecorderService: ObservableObject {
     private func startCapture() throws {
         transcript = ""
         elapsedSeconds = 0
-        levels = Array(repeating: 0.12, count: 34)
+        levels = Array(repeating: 0.12, count: 42)
         statusMessage = "Tap to stop & save"
 
         let fileURL = FileManager.default.temporaryDirectory
@@ -121,18 +130,100 @@ final class RecorderService: ObservableObject {
 
         startedAt = Date()
         isRecording = true
+        startLiveTranscriptionIfPossible()
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(for: .milliseconds(80))
                 await MainActor.run {
                     guard let self, let startedAt = self.startedAt else { return }
-                    self.elapsedSeconds = Date().timeIntervalSince(startedAt)
+                    let elapsed = Date().timeIntervalSince(startedAt)
+                    self.elapsedSeconds = elapsed
                     self.audioRecorder?.updateMeters()
                     let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -80
-                    self.pushLevel(Self.level(fromPower: power))
+                    self.pushLevel(Self.level(fromPower: power, elapsed: elapsed))
                 }
             }
         }
+    }
+
+    private func startLiveTranscriptionIfPossible() {
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized,
+              let speechRecognizer,
+              speechRecognizer.isAvailable else {
+            statusMessage = "Recording audio..."
+            return
+        }
+
+        do {
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            request.shouldReportPartialResults = true
+            request.taskHint = .dictation
+            liveRecognitionRequest = request
+
+            let inputNode = liveAudioEngine.inputNode
+            inputNode.removeTap(onBus: 0)
+            let inputFormat = inputNode.outputFormat(forBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 512, format: inputFormat) { [weak request] buffer, _ in
+                request?.append(buffer)
+            }
+
+            liveAudioEngine.prepare()
+            try liveAudioEngine.start()
+            isLiveTranscriptionActive = true
+            statusMessage = "Listening..."
+
+            liveRecognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+                if let result {
+                    let text = result.bestTranscription.formattedString
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        self.transcript = text
+                        self.statusMessage = result.isFinal ? "Tap to stop & save" : "Listening..."
+                    }
+                }
+
+                if error != nil {
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isRecording else { return }
+                        self.statusMessage = "Recording audio..."
+                    }
+                }
+            }
+        } catch {
+            cancelLiveTranscription()
+            statusMessage = "Recording audio..."
+        }
+    }
+
+    private func finishLiveTranscription() async {
+        guard isLiveTranscriptionActive || liveRecognitionRequest != nil || liveRecognitionTask != nil else { return }
+
+        if liveAudioEngine.isRunning {
+            liveAudioEngine.stop()
+        }
+        if isLiveTranscriptionActive {
+            liveAudioEngine.inputNode.removeTap(onBus: 0)
+        }
+        liveRecognitionRequest?.endAudio()
+        try? await Task.sleep(for: .milliseconds(600))
+        liveRecognitionTask?.cancel()
+        liveRecognitionTask = nil
+        liveRecognitionRequest = nil
+        isLiveTranscriptionActive = false
+    }
+
+    private func cancelLiveTranscription() {
+        if liveAudioEngine.isRunning {
+            liveAudioEngine.stop()
+        }
+        if isLiveTranscriptionActive {
+            liveAudioEngine.inputNode.removeTap(onBus: 0)
+        }
+        liveRecognitionRequest?.endAudio()
+        liveRecognitionTask?.cancel()
+        liveRecognitionTask = nil
+        liveRecognitionRequest = nil
+        isLiveTranscriptionActive = false
     }
 
     private func transcribe(url: URL) async -> String {
@@ -174,7 +265,7 @@ final class RecorderService: ObservableObject {
                 continuation.resume(returning: text)
             }
 
-            recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
+            fileRecognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
                 if let result {
                     let text = result.bestTranscription.formattedString
                     lock.lock()
@@ -209,7 +300,8 @@ final class RecorderService: ObservableObject {
 
     private func cleanup() {
         audioRecorder?.stop()
-        recognitionTask?.cancel()
+        fileRecognitionTask?.cancel()
+        cancelLiveTranscription()
         timerTask?.cancel()
         audioRecorder = nil
         audioURL = nil
@@ -221,14 +313,16 @@ final class RecorderService: ObservableObject {
     private func pushLevel(_ value: CGFloat) {
         let clamped = min(max(value, 0.08), 1)
         levels.append(clamped)
-        if levels.count > 34 {
-            levels.removeFirst(levels.count - 34)
+        if levels.count > 42 {
+            levels.removeFirst(levels.count - 42)
         }
     }
 
-    private static func level(fromPower power: Float) -> CGFloat {
+    private static func level(fromPower power: Float, elapsed: Double) -> CGFloat {
         guard power.isFinite else { return 0.08 }
-        let normalized = max(0, min(1, (power + 55) / 55))
-        return max(0.08, CGFloat(normalized))
+        let normalized = max(0, min(1, (power + 58) / 58))
+        let responsive = pow(CGFloat(normalized), 0.55)
+        let idleMotion = 0.11 + ((sin(elapsed * 14) + 1) * 0.025)
+        return max(CGFloat(idleMotion), responsive)
     }
 }
