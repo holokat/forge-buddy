@@ -58,19 +58,19 @@ struct WelcomeView: View {
             Text("Forge")
                 .font(.system(size: 35, weight: .semibold))
                 .tracking(-1)
-            Text("Speak a note - it's transcribed and synced to your Mac in seconds.")
+            Text("Record locally first. Pair your Mac now, or connect later and sync when you're ready.")
                 .font(.forgeBody(16))
                 .foregroundStyle(ForgeTheme.soft)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 250)
+                .frame(maxWidth: 280)
             Spacer()
             VStack(spacing: 8) {
                 PrimaryButton(title: "Connect your Mac") {
                     model.beginPairing()
                 }
-                Button("Set up later") {
+                Button("Use without Mac") {
                     model.completeWelcome()
                 }
                 .font(.forgeBody(15, weight: .semibold))
@@ -194,7 +194,7 @@ struct PairedView: View {
                 Text("You're connected")
                     .font(.forgeTitle(29))
                     .tracking(-0.7)
-                Text("Recordings and folders will save straight into Forge.")
+                Text("Recordings save on this iPhone first, then sync to Forge.")
                     .font(.forgeBody(16))
                     .foregroundStyle(ForgeTheme.soft)
                     .multilineTextAlignment(.center)
@@ -628,6 +628,48 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
+                    SectionLabel("LOCAL SYNC")
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(model.pendingItemCount > 0 ? ForgeTheme.blue.opacity(0.14) : ForgeTheme.successTint)
+                                Image(systemName: model.pendingItemCount > 0 ? "arrow.up.circle" : "checkmark")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(model.pendingItemCount > 0 ? ForgeTheme.blue : ForgeTheme.green)
+                            }
+                            .frame(width: 38, height: 38)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(model.pendingItemCount > 0 ? "\(model.pendingItemCount) item\(model.pendingItemCount == 1 ? "" : "s") waiting" : "Everything local is synced")
+                                    .font(.forgeBody(15, weight: .semibold))
+                                Text(model.pairing == nil ? "Pair a Mac whenever you want to upload local recordings." : "Recordings remain playable on this iPhone.")
+                                    .font(.forgeBody(12.5, weight: .medium))
+                                    .foregroundStyle(ForgeTheme.soft)
+                            }
+                            Spacer()
+                        }
+
+                        PrimaryButton(title: model.pendingItemCount > 0 ? "Sync now" : "Check for changes") {
+                            Task { await model.syncNow() }
+                        }
+                        .disabled(model.isSyncing || model.isRefreshing || model.pairing == nil && model.pendingItemCount > 0)
+
+                        if model.pairing == nil {
+                            SecondaryButton(title: "Pair a Mac", symbol: "qrcode") {
+                                model.screen = .scan
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(ForgeTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(ForgeTheme.border, lineWidth: 1)
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
                     SectionLabel("PAIRED MAC")
                     if model.pairing != nil {
                         DeviceCard()
@@ -874,16 +916,7 @@ struct TopChrome: View {
             Text("Forge")
                 .font(.forgeBody(17, weight: .semibold))
             Spacer()
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(model.isConnected ? ForgeTheme.green : ForgeTheme.faint)
-                    .frame(width: 7, height: 7)
-                Text(model.statusText)
-                    .font(.forgeBody(12.5, weight: .semibold))
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(model.isConnected ? ForgeTheme.successTint : ForgeTheme.subtleSurface, in: Capsule())
+            SyncStatusPill()
 
             RefreshIconButton(size: 34)
 
@@ -891,6 +924,38 @@ struct TopChrome: View {
                 model.screen = .settings
             }
         }
+    }
+}
+
+struct SyncStatusPill: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if model.pendingItemCount > 0 {
+                Image(systemName: model.isSyncing ? "arrow.triangle.2.circlepath" : "arrow.up.circle")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(ForgeTheme.blue)
+            } else {
+                Circle()
+                    .fill(model.isConnected ? ForgeTheme.green : ForgeTheme.faint)
+                    .frame(width: 7, height: 7)
+            }
+            Text(model.statusText)
+                .font(.forgeBody(12.5, weight: .semibold))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .background(statusBackground, in: Capsule())
+        .accessibilityLabel(model.statusText)
+    }
+
+    private var statusBackground: Color {
+        if model.pendingItemCount > 0 {
+            return ForgeTheme.blue.opacity(0.12)
+        }
+        return model.isConnected ? ForgeTheme.successTint : ForgeTheme.subtleSurface
     }
 }
 
@@ -971,6 +1036,9 @@ struct FolderRow: View {
                 Text("\(folder.noteCount)")
                     .font(.forgeBody(12.5, weight: .semibold))
                     .foregroundStyle(ForgeTheme.faint)
+                if folder.needsSync {
+                    SyncBadge(state: folder.syncState)
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(ForgeTheme.tertiary)
@@ -999,6 +1067,9 @@ struct NoteRow: View {
                     .font(.forgeBody(15, weight: .medium))
                     .lineLimit(1)
                 Spacer()
+                if note.needsSync {
+                    SyncBadge(state: note.syncState)
+                }
                 Text("\(relativeTime(note.recordedAt)) · \(formatDuration(note.durationSeconds ?? 0))")
                     .font(.forgeBody(12.5, weight: .medium))
                     .foregroundStyle(ForgeTheme.faint)
@@ -1009,6 +1080,42 @@ struct NoteRow: View {
         }
         .foregroundStyle(ForgeTheme.text)
         .buttonStyle(RowButtonStyle())
+    }
+}
+
+struct SyncBadge: View {
+    let state: BuddySyncState
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(color)
+            .frame(width: 18, height: 18)
+            .accessibilityLabel(state.label)
+    }
+
+    private var symbol: String {
+        switch state {
+        case .failed:
+            return "exclamationmark.circle"
+        case .syncing:
+            return "arrow.triangle.2.circlepath"
+        case .pending:
+            return "arrow.up.circle"
+        case .synced:
+            return "checkmark.circle"
+        }
+    }
+
+    private var color: Color {
+        switch state {
+        case .failed:
+            return ForgeTheme.red
+        case .syncing, .pending:
+            return ForgeTheme.blue
+        case .synced:
+            return ForgeTheme.green
+        }
     }
 }
 
@@ -1136,15 +1243,15 @@ struct RefreshIconButton: View {
 
     var body: some View {
         Button {
-            Task { await model.refresh() }
+            Task { await model.syncNow() }
         } label: {
             ZStack {
-                if model.isRefreshing {
+                if model.isRefreshing || model.isSyncing {
                     ProgressView()
                         .controlSize(.small)
                         .tint(ForgeTheme.secondary)
                 } else {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: model.pendingItemCount > 0 ? "arrow.up.circle" : "arrow.clockwise")
                         .font(.system(size: max(14, size * 0.4), weight: .semibold))
                         .foregroundStyle(ForgeTheme.secondary)
                 }
@@ -1156,9 +1263,9 @@ struct RefreshIconButton: View {
                     .stroke(ForgeTheme.border, lineWidth: 1)
             )
         }
-        .disabled(model.isRefreshing)
+        .disabled(model.isRefreshing || model.isSyncing)
         .buttonStyle(PressButtonStyle())
-        .accessibilityLabel("Refresh")
+        .accessibilityLabel(model.pendingItemCount > 0 ? "Sync pending items" : "Refresh")
     }
 }
 

@@ -5,13 +5,32 @@ struct BuddyFolder: Identifiable, Codable, Hashable {
     var path: String
     var name: String
     var noteCount: Int
+    var syncState: BuddySyncState
+    var lastSyncError: String?
 
     var id: String { path }
+    var needsSync: Bool { syncState != .synced }
 
-    init(path: String, name: String, noteCount: Int = 0) {
+    init(
+        path: String,
+        name: String,
+        noteCount: Int = 0,
+        syncState: BuddySyncState = .synced,
+        lastSyncError: String? = nil
+    ) {
         self.path = path
         self.name = name
         self.noteCount = noteCount
+        self.syncState = syncState
+        self.lastSyncError = lastSyncError
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case name
+        case noteCount
+        case syncState
+        case lastSyncError
     }
 
     init(from decoder: Decoder) throws {
@@ -19,7 +38,31 @@ struct BuddyFolder: Identifiable, Codable, Hashable {
         path = try container.decode(String.self, forKey: .path)
         name = try container.decode(String.self, forKey: .name)
         noteCount = try container.decodeIfPresent(Int.self, forKey: .noteCount) ?? 0
+        syncState = try container.decodeIfPresent(BuddySyncState.self, forKey: .syncState) ?? .synced
+        lastSyncError = try container.decodeIfPresent(String.self, forKey: .lastSyncError)
     }
+}
+
+enum BuddySyncState: String, Codable, Hashable {
+    case synced
+    case pending
+    case syncing
+    case failed
+
+    var label: String {
+        switch self {
+        case .synced: return "Synced"
+        case .pending: return "Pending"
+        case .syncing: return "Syncing"
+        case .failed: return "Sync failed"
+        }
+    }
+}
+
+enum BuddyPendingAction: String, Codable, Hashable {
+    case create
+    case update
+    case move
 }
 
 struct BuddyNote: Identifiable, Codable, Hashable {
@@ -30,8 +73,13 @@ struct BuddyNote: Identifiable, Codable, Hashable {
     var recordedAt: Date?
     var durationSeconds: Double?
     var audioPath: String?
+    var localAudioFileName: String?
+    var syncState: BuddySyncState
+    var pendingAction: BuddyPendingAction?
+    var lastSyncError: String?
 
     var id: String { path }
+    var needsSync: Bool { syncState != .synced }
 
     init(
         path: String,
@@ -40,7 +88,11 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         transcript: String,
         recordedAt: Date? = nil,
         durationSeconds: Double? = nil,
-        audioPath: String? = nil
+        audioPath: String? = nil,
+        localAudioFileName: String? = nil,
+        syncState: BuddySyncState = .synced,
+        pendingAction: BuddyPendingAction? = nil,
+        lastSyncError: String? = nil
     ) {
         self.path = path
         self.folderPath = folderPath
@@ -49,6 +101,10 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         self.recordedAt = recordedAt
         self.durationSeconds = durationSeconds
         self.audioPath = audioPath
+        self.localAudioFileName = localAudioFileName
+        self.syncState = syncState
+        self.pendingAction = pendingAction
+        self.lastSyncError = lastSyncError
     }
 
     enum CodingKeys: String, CodingKey {
@@ -59,6 +115,10 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         case recordedAt
         case durationSeconds
         case audioPath
+        case localAudioFileName
+        case syncState
+        case pendingAction
+        case lastSyncError
     }
 
     init(from decoder: Decoder) throws {
@@ -68,7 +128,11 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
         transcript = try container.decodeIfPresent(String.self, forKey: .transcript) ?? ""
         audioPath = try container.decodeIfPresent(String.self, forKey: .audioPath)
+        localAudioFileName = try container.decodeIfPresent(String.self, forKey: .localAudioFileName)
         durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds)
+        syncState = try container.decodeIfPresent(BuddySyncState.self, forKey: .syncState) ?? .synced
+        pendingAction = try container.decodeIfPresent(BuddyPendingAction.self, forKey: .pendingAction)
+        lastSyncError = try container.decodeIfPresent(String.self, forKey: .lastSyncError)
         if let rawDate = try container.decodeIfPresent(String.self, forKey: .recordedAt) {
             recordedAt = ISO8601DateFormatter.forge.date(from: rawDate)
         } else {
@@ -84,6 +148,10 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         try container.encode(transcript, forKey: .transcript)
         try container.encodeIfPresent(durationSeconds, forKey: .durationSeconds)
         try container.encodeIfPresent(audioPath, forKey: .audioPath)
+        try container.encodeIfPresent(localAudioFileName, forKey: .localAudioFileName)
+        try container.encode(syncState, forKey: .syncState)
+        try container.encodeIfPresent(pendingAction, forKey: .pendingAction)
+        try container.encodeIfPresent(lastSyncError, forKey: .lastSyncError)
         if let recordedAt {
             try container.encode(ISO8601DateFormatter.forge.string(from: recordedAt), forKey: .recordedAt)
         }

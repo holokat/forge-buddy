@@ -26,19 +26,25 @@ struct ForgeClient {
         let _: EmptyResponse = try await send(path: "/api/buddy/folders/delete", method: "POST", body: body)
     }
 
-    func createNote(folderPath: String, transcript: String, audioURL: URL, durationSeconds: Double) async throws -> BuddyNote {
-        let audioData = try Data(contentsOf: audioURL)
+    func createNote(
+        folderPath: String,
+        transcript: String,
+        audioURL: URL?,
+        durationSeconds: Double,
+        recordedAt: Date = Date()
+    ) async throws -> BuddyNote {
+        let audioData = try audioURL.map { try Data(contentsOf: $0) }
         let deviceName = await MainActor.run { UIDevice.current.name }
         let request = NoteRequest(
             path: nil,
             folderPath: folderPath,
             transcript: transcript,
             title: Self.title(from: transcript),
-            recordedAt: ISO8601DateFormatter.forge.string(from: Date()),
+            recordedAt: ISO8601DateFormatter.forge.string(from: recordedAt),
             durationSeconds: durationSeconds,
             deviceName: deviceName,
-            audioBase64: audioData.base64EncodedString(),
-            audioFileName: audioURL.lastPathComponent
+            audioBase64: audioData?.base64EncodedString(),
+            audioFileName: audioURL?.lastPathComponent
         )
         let body = try JSONEncoder().encode(request)
         let response: NoteResponse = try await send(path: "/api/buddy/notes/create", method: "POST", body: body)

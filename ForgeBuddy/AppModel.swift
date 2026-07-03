@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
     @Published var appearance: AppearanceMode = .system
     @Published var isConnected = false
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isSyncing = false
     @Published var statusText = "Offline"
     @Published var errorMessage: String?
 
@@ -31,10 +32,16 @@ final class AppModel: ObservableObject {
                 BuddyFolder(path: "Ideas", name: "Ideas", noteCount: 0)
             ]
         }
+        refreshLocalCounts()
+        updateStatusText()
     }
 
     var client: ForgeClient? {
         pairing.map(ForgeClient.init(pairing:))
+    }
+
+    var pendingItemCount: Int {
+        folders.filter(\.needsSync).count + notes.filter(\.needsSync).count
     }
 
     func completeWelcome() {
@@ -73,30 +80,43 @@ final class AppModel: ObservableObject {
         guard !isRefreshing else { return }
         guard let client else {
             isConnected = false
-            statusText = "Not paired"
+            updateStatusText()
             return
         }
 
         let previousFolders = folders
         let previousNotes = notes
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            updateStatusText()
+        }
 
         do {
             statusText = "Syncing"
             let snapshot = try await client.snapshot()
-            folders = snapshot.0
-            notes = snapshot.1
+            mergeRemoteSnapshot(
+                folders: snapshot.0,
+                notes: snapshot.1,
+                previousFolders: previousFolders,
+                previousNotes: previousNotes
+            )
             ensureFolderSelection()
             reconcileNavigation(previousFolders: previousFolders, previousNotes: previousNotes)
             isConnected = true
-            statusText = "Connected"
             errorMessage = nil
             save()
         } catch {
             isConnected = false
-            statusText = "Offline"
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func syncNow() async {
+        if pendingItemCount > 0 {
+            await syncPending(showSuccess: true)
+        } else {
+            await refresh()
         }
     }
 
@@ -117,6 +137,10 @@ final class AppModel: ObservableObject {
     }
 
     func audioURL(for note: BuddyNote) -> URL? {
+        if let localAudioFileName = note.localAudioFileName,
+           let localURL = store.localAudioURL(fileName: localAudioFileName) {
+            return localURL
+        }
         guard let audioPath = note.audioPath else { return nil }
         return client?.audioURL(path: audioPath)
     }
@@ -125,25 +149,31 @@ final class AppModel: ObservableObject {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
-        do {
-            if let client {
+        if let client {
+            do {
                 let folder = try await client.createFolder(name: name)
                 upsert(folder: folder)
                 await refresh()
-            } else {
-                let path = uniqueLocalFolderPath(name)
-                folders.append(BuddyFolder(path: path, name: name, noteCount: 0))
-                save()
+            } catch {
+                createLocalFolder(named: name, syncState: .failed, lastSyncError: error.localizedDescription)
+                errorMessage = "Folder saved locally. Sync when your Mac is reachable."
             }
-            sheet = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            createLocalFolder(named: name, syncState: .pending)
         }
+        sheet = nil
     }
 
     func renameFolder(path: String, to rawName: String) async {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+        let shouldRenameLocally = client == nil || folder(path: path)?.needsSync == true
+
+        if shouldRenameLocally {
+            renameLocalFolder(path: path, to: name)
+            sheet = nil
+            return
+        }
 
         do {
             if let client {
@@ -151,20 +181,6 @@ final class AppModel: ObservableObject {
                 upsert(folder: folder)
                 await refresh()
                 screen = .folder(folder.path)
-            } else if let index = folders.firstIndex(where: { $0.path == path }) {
-                let parent = Self.parentPath(path)
-                let nextPath = parent == "." ? name : "\(parent)/\(name)"
-                folders[index].path = nextPath
-                folders[index].name = name
-                notes = notes.map { note in
-                    guard note.folderPath == path else { return note }
-                    var copy = note
-                    copy.folderPath = nextPath
-                    copy.path = note.path.replacingOccurrences(of: "\(path)/", with: "\(nextPath)/")
-                    return copy
-                }
-                screen = .folder(nextPath)
-                save()
             }
             sheet = nil
         } catch {
@@ -174,13 +190,14 @@ final class AppModel: ObservableObject {
 
     func deleteFolder(path: String) async {
         do {
-            if let client {
-                try await client.deleteFolder(path: path)
-                await refresh()
-            } else {
+            if folder(path: path)?.needsSync == true || client == nil {
                 folders.removeAll { $0.path == path || $0.path.hasPrefix("\(path)/") }
                 notes.removeAll { $0.folderPath == path || $0.folderPath.hasPrefix("\(path)/") }
                 save()
+                updateStatusText()
+            } else if let client {
+                try await client.deleteFolder(path: path)
+                await refresh()
             }
             screen = .home
             sheet = nil
@@ -203,78 +220,100 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            if let client {
-                let note = try await client.createNote(
-                    folderPath: folderPath,
-                    transcript: result.transcript,
-                    audioURL: result.audioURL,
-                    durationSeconds: result.durationSeconds
-                )
-                upsert(note: note)
-                await refresh()
-            } else {
-                let note = localNote(folderPath: folderPath, transcript: result.transcript, duration: result.durationSeconds)
-                upsert(note: note)
-                incrementCount(for: folderPath)
-                save()
-            }
+            let localAudioFileName = try store.persistRecording(from: result.audioURL)
+            let note = localNote(
+                folderPath: folderPath,
+                transcript: result.transcript,
+                duration: result.durationSeconds,
+                localAudioFileName: localAudioFileName
+            )
+            upsert(note: note)
+            save()
             screen = .folder(folderPath)
+            if pairing != nil {
+                await syncPending(showSuccess: false)
+            } else {
+                updateStatusText()
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "The recording could not be saved locally: \(error.localizedDescription)"
             screen = .folder(folderPath)
         }
     }
 
     func updateTranscript(notePath: String, transcript: String) async {
-        do {
-            if let client {
+        guard let index = notes.firstIndex(where: { $0.path == notePath }) else { return }
+
+        if let client, !notes[index].needsSync {
+            do {
                 let note = try await client.updateNote(path: notePath, transcript: transcript)
                 upsert(note: note)
                 await refresh()
-            } else if let index = notes.firstIndex(where: { $0.path == notePath }) {
-                notes[index].transcript = transcript
-                save()
+                return
+            } catch {
+                notes[index].lastSyncError = error.localizedDescription
+                errorMessage = "Transcript saved locally. Sync when your Mac is reachable."
             }
-        } catch {
-            errorMessage = error.localizedDescription
         }
+
+        notes[index].transcript = transcript
+        notes[index].title = Self.title(from: transcript)
+        if notes[index].pendingAction != .create {
+            notes[index].pendingAction = .update
+        }
+        notes[index].syncState = .pending
+        save()
+        updateStatusText()
     }
 
     func moveNote(path: String, to folderPath: String) async {
-        do {
-            if let client {
+        guard let index = notes.firstIndex(where: { $0.path == path }) else { return }
+        let localMove = {
+            let fileName = URL(fileURLWithPath: path).lastPathComponent
+            self.notes[index].folderPath = folderPath
+            self.notes[index].path = "\(folderPath)/\(fileName)"
+            if self.notes[index].pendingAction != .create {
+                self.notes[index].pendingAction = .move
+                self.notes[index].syncState = .pending
+            }
+            self.refreshLocalCounts()
+            self.save()
+            self.screen = .folder(folderPath)
+            self.sheet = nil
+            self.updateStatusText()
+        }
+
+        if let client, !notes[index].needsSync {
+            do {
                 let note = try await client.moveNote(path: path, folderPath: folderPath)
                 upsert(note: note)
                 await refresh()
                 screen = .folder(folderPath)
-            } else if let index = notes.firstIndex(where: { $0.path == path }) {
-                let fileName = URL(fileURLWithPath: path).lastPathComponent
-                notes[index].folderPath = folderPath
-                notes[index].path = "\(folderPath)/\(fileName)"
-                refreshLocalCounts()
-                save()
-                screen = .folder(folderPath)
+                sheet = nil
+                return
+            } catch {
+                notes[index].lastSyncError = error.localizedDescription
+                errorMessage = "Move saved locally. Sync when your Mac is reachable."
             }
-            sheet = nil
-        } catch {
-            errorMessage = error.localizedDescription
         }
+
+        localMove()
     }
 
     func deleteNote(path: String) async {
         do {
-            let folderPath = note(path: path)?.folderPath
-            if let client {
-                try await client.deleteNote(path: path)
-                await refresh()
-            } else {
+            guard let existing = note(path: path) else { return }
+            let folderPath = existing.folderPath
+            if existing.pendingAction == .create || client == nil {
                 notes.removeAll { $0.path == path }
                 refreshLocalCounts()
                 save()
+                updateStatusText()
+            } else if let client {
+                try await client.deleteNote(path: path)
+                await refresh()
             }
-            if let folderPath {
-                screen = .folder(folderPath)
-            }
+            screen = .folder(folderPath)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -283,8 +322,8 @@ final class AppModel: ObservableObject {
     func disconnect() {
         pairing = nil
         isConnected = false
-        statusText = "Not paired"
         save()
+        updateStatusText()
     }
 
     func setAppearance(_ mode: AppearanceMode) {
@@ -292,9 +331,213 @@ final class AppModel: ObservableObject {
         save()
     }
 
+    private func syncPending(showSuccess: Bool) async {
+        guard !isSyncing else { return }
+        guard let client else {
+            isConnected = false
+            updateStatusText()
+            if showSuccess {
+                errorMessage = "Pair a Mac to sync local notes into Forge."
+            }
+            return
+        }
+
+        isSyncing = true
+        statusText = "Syncing"
+        defer {
+            isSyncing = false
+            updateStatusText()
+        }
+
+        var syncedCount = 0
+        var failedCount = 0
+
+        for folder in folders.filter(\.needsSync) {
+            guard let index = folders.firstIndex(where: { $0.path == folder.path }) else { continue }
+            folders[index].syncState = .syncing
+            do {
+                let remote = try await client.createFolder(name: folder.name)
+                replaceLocalFolder(path: folder.path, with: remote)
+                syncedCount += 1
+            } catch {
+                if let remote = await matchingRemoteFolder(for: folder, client: client) {
+                    replaceLocalFolder(path: folder.path, with: remote)
+                    syncedCount += 1
+                } else if let failureIndex = folders.firstIndex(where: { $0.path == folder.path }) {
+                    folders[failureIndex].syncState = .failed
+                    folders[failureIndex].lastSyncError = error.localizedDescription
+                    failedCount += 1
+                }
+            }
+        }
+
+        for note in notes.filter(\.needsSync) {
+            guard let current = self.note(path: note.path) else { continue }
+            markNote(path: current.path, syncState: .syncing, error: nil)
+            do {
+                let remote = try await sync(note: current, client: client)
+                replaceLocalNote(path: current.path, with: remote, preservingLocalAudioFrom: current)
+                syncedCount += 1
+            } catch {
+                markNote(path: current.path, syncState: .failed, error: error.localizedDescription)
+                failedCount += 1
+            }
+        }
+
+        refreshLocalCounts()
+        save()
+
+        if failedCount > 0 && syncedCount == 0 {
+            isConnected = false
+        } else if syncedCount > 0 {
+            isConnected = true
+        }
+
+        if syncedCount > 0 {
+            await refresh()
+        }
+
+        if failedCount > 0, showSuccess {
+            errorMessage = "\(failedCount) item\(failedCount == 1 ? "" : "s") could not sync. They remain saved locally."
+        }
+    }
+
+    private func sync(note: BuddyNote, client: ForgeClient) async throws -> BuddyNote {
+        switch note.pendingAction ?? .create {
+        case .create:
+            return try await client.createNote(
+                folderPath: note.folderPath,
+                transcript: note.transcript,
+                audioURL: note.localAudioFileName.flatMap(store.localAudioURL(fileName:)),
+                durationSeconds: note.durationSeconds ?? 0,
+                recordedAt: note.recordedAt ?? Date()
+            )
+        case .update:
+            return try await client.updateNote(path: note.path, transcript: note.transcript)
+        case .move:
+            return try await client.moveNote(path: note.path, folderPath: note.folderPath)
+        }
+    }
+
+    private func matchingRemoteFolder(for folder: BuddyFolder, client: ForgeClient) async -> BuddyFolder? {
+        guard let snapshot = try? await client.snapshot() else { return nil }
+        return snapshot.0.first { $0.path == folder.path || $0.name == folder.name }
+    }
+
+    private func mergeRemoteSnapshot(
+        folders remoteFolders: [BuddyFolder],
+        notes remoteNotes: [BuddyNote],
+        previousFolders: [BuddyFolder],
+        previousNotes: [BuddyNote]
+    ) {
+        let previousNotesByPath = Dictionary(uniqueKeysWithValues: previousNotes.map { ($0.path, $0) })
+        var mergedFolders = remoteFolders.map { remote in
+            var copy = remote
+            copy.syncState = .synced
+            copy.lastSyncError = nil
+            return copy
+        }
+
+        for local in previousFolders where local.needsSync && !mergedFolders.contains(where: { $0.path == local.path }) {
+            mergedFolders.append(local)
+        }
+
+        var mergedNotes = remoteNotes.map { remote in
+            var copy = remote
+            copy.localAudioFileName = previousNotesByPath[remote.path]?.localAudioFileName
+            copy.syncState = .synced
+            copy.pendingAction = nil
+            copy.lastSyncError = nil
+            return copy
+        }
+
+        for local in previousNotes where local.needsSync && !mergedNotes.contains(where: { $0.path == local.path }) {
+            mergedNotes.append(local)
+        }
+
+        folders = mergedFolders.sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
+        notes = mergedNotes.sorted {
+            ($0.recordedAt ?? .distantPast) > ($1.recordedAt ?? .distantPast)
+        }
+        refreshLocalCounts()
+    }
+
+    private func replaceLocalFolder(path localPath: String, with remote: BuddyFolder) {
+        var synced = remote
+        synced.syncState = .synced
+        synced.lastSyncError = nil
+
+        if let index = folders.firstIndex(where: { $0.path == localPath }) {
+            folders[index] = synced
+        } else {
+            upsert(folder: synced)
+        }
+
+        guard localPath != synced.path else { return }
+        notes = notes.map { note in
+            guard note.folderPath == localPath || note.folderPath.hasPrefix("\(localPath)/") else { return note }
+            var copy = note
+            copy.folderPath = copy.folderPath.replacingOccurrences(of: localPath, with: synced.path)
+            copy.path = copy.path.replacingOccurrences(of: "\(localPath)/", with: "\(synced.path)/")
+            return copy
+        }
+    }
+
+    private func replaceLocalNote(path localPath: String, with remote: BuddyNote, preservingLocalAudioFrom local: BuddyNote) {
+        var synced = remote
+        synced.localAudioFileName = local.localAudioFileName
+        synced.syncState = .synced
+        synced.pendingAction = nil
+        synced.lastSyncError = nil
+
+        if let index = notes.firstIndex(where: { $0.path == localPath }) {
+            notes[index] = synced
+        } else {
+            upsert(note: synced)
+        }
+    }
+
+    private func markNote(path: String, syncState: BuddySyncState, error: String?) {
+        guard let index = notes.firstIndex(where: { $0.path == path }) else { return }
+        notes[index].syncState = syncState
+        notes[index].lastSyncError = error
+    }
+
+    private func createLocalFolder(named name: String, syncState: BuddySyncState, lastSyncError: String? = nil) {
+        let path = uniqueLocalFolderPath(name)
+        folders.append(BuddyFolder(path: path, name: name, noteCount: 0, syncState: syncState, lastSyncError: lastSyncError))
+        save()
+        updateStatusText()
+    }
+
+    private func renameLocalFolder(path: String, to name: String) {
+        guard let index = folders.firstIndex(where: { $0.path == path }) else { return }
+        let parent = Self.parentPath(path)
+        let nextPath = parent == "." ? uniqueLocalFolderPath(name) : "\(parent)/\(name)"
+        let currentSyncState = folders[index].syncState == .synced ? BuddySyncState.pending : folders[index].syncState
+        folders[index].path = nextPath
+        folders[index].name = name
+        folders[index].syncState = currentSyncState
+        notes = notes.map { note in
+            guard note.folderPath == path || note.folderPath.hasPrefix("\(path)/") else { return note }
+            var copy = note
+            copy.folderPath = copy.folderPath.replacingOccurrences(of: path, with: nextPath)
+            copy.path = copy.path.replacingOccurrences(of: "\(path)/", with: "\(nextPath)/")
+            return copy
+        }
+        screen = .folder(nextPath)
+        refreshLocalCounts()
+        save()
+        updateStatusText()
+    }
+
     private func upsert(folder: BuddyFolder) {
         if let index = folders.firstIndex(where: { $0.path == folder.path }) {
-            folders[index] = folder
+            var next = folder
+            if next.syncState == .synced {
+                next.lastSyncError = nil
+            }
+            folders[index] = next
         } else {
             folders.append(folder)
         }
@@ -302,7 +545,15 @@ final class AppModel: ObservableObject {
 
     private func upsert(note: BuddyNote) {
         if let index = notes.firstIndex(where: { $0.path == note.path }) {
-            notes[index] = note
+            var next = note
+            if next.localAudioFileName == nil {
+                next.localAudioFileName = notes[index].localAudioFileName
+            }
+            if next.syncState == .synced {
+                next.pendingAction = nil
+                next.lastSyncError = nil
+            }
+            notes[index] = next
         } else {
             notes.append(note)
         }
@@ -466,21 +717,54 @@ final class AppModel: ObservableObject {
         return candidate
     }
 
-    private func localNote(folderPath: String, transcript: String, duration: Double) -> BuddyNote {
+    private func localNote(
+        folderPath: String,
+        transcript: String,
+        duration: Double,
+        localAudioFileName: String
+    ) -> BuddyNote {
         let date = Date()
-        let title = transcript
-            .split(whereSeparator: \.isWhitespace)
-            .prefix(7)
-            .joined(separator: " ")
-        let fileName = "\(Self.pathDate(date)) \(title.isEmpty ? "Voice Note" : title).md"
+        let title = Self.title(from: transcript)
+        let fileName = "\(Self.pathDate(date)) \(Self.safeFileComponent(title)).md"
         return BuddyNote(
-            path: "\(folderPath)/\(fileName)",
+            path: uniqueLocalNotePath(folderPath: folderPath, fileName: fileName),
             folderPath: folderPath,
-            title: title.isEmpty ? "Voice Note" : title,
+            title: title,
             transcript: transcript,
             recordedAt: date,
-            durationSeconds: duration
+            durationSeconds: duration,
+            localAudioFileName: localAudioFileName,
+            syncState: .pending,
+            pendingAction: .create
         )
+    }
+
+    private func uniqueLocalNotePath(folderPath: String, fileName: String) -> String {
+        let ext = URL(fileURLWithPath: fileName).pathExtension
+        let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+        var candidate = "\(folderPath)/\(fileName)"
+        var suffix = 1
+        let existing = Set(notes.map(\.path))
+        while existing.contains(candidate) {
+            suffix += 1
+            let nextFileName = ext.isEmpty ? "\(stem) \(suffix)" : "\(stem) \(suffix).\(ext)"
+            candidate = "\(folderPath)/\(nextFileName)"
+        }
+        return candidate
+    }
+
+    private func updateStatusText() {
+        if pendingItemCount > 0 {
+            statusText = "\(pendingItemCount) pending"
+        } else if isSyncing || isRefreshing {
+            statusText = "Syncing"
+        } else if isConnected {
+            statusText = "Connected"
+        } else if pairing == nil {
+            statusText = "Local only"
+        } else {
+            statusText = "Offline"
+        }
     }
 
     private func save() {
@@ -501,6 +785,25 @@ final class AppModel: ObservableObject {
         return formatter.string(from: date)
     }
 
+    private static func title(from transcript: String) -> String {
+        let title = transcript
+            .split(whereSeparator: \.isWhitespace)
+            .prefix(7)
+            .joined(separator: " ")
+        return title.isEmpty ? "Voice Note" : title
+    }
+
+    private static func safeFileComponent(_ value: String) -> String {
+        let illegal = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+            .union(.newlines)
+            .union(.controlCharacters)
+        let cleaned = value
+            .components(separatedBy: illegal)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Voice Note" : cleaned
+    }
+
     private static func parentPath(_ path: String) -> String {
         let parts = path.split(separator: "/").map(String.init)
         guard parts.count > 1 else { return "." }
@@ -519,7 +822,16 @@ struct BuddyState: Codable {
 private final class BuddyStore {
     private let defaults = UserDefaults.standard
     private let key = "forge-buddy-state-v1"
+    private let fileManager = FileManager.default
     var hasCompletedWelcome = false
+
+    var recordingsDirectory: URL {
+        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        return baseURL
+            .appendingPathComponent("Forge Buddy", isDirectory: true)
+            .appendingPathComponent("Recordings", isDirectory: true)
+    }
 
     func load() -> BuddyState {
         guard let data = defaults.data(forKey: key),
@@ -535,5 +847,22 @@ private final class BuddyStore {
         hasCompletedWelcome = state.hasCompletedWelcome
         guard let data = try? JSONEncoder().encode(state) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    func persistRecording(from sourceURL: URL) throws -> String {
+        try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
+        let ext = sourceURL.pathExtension.isEmpty ? "m4a" : sourceURL.pathExtension
+        let fileName = "\(UUID().uuidString).\(ext)"
+        let targetURL = recordingsDirectory.appendingPathComponent(fileName)
+        if fileManager.fileExists(atPath: targetURL.path) {
+            try fileManager.removeItem(at: targetURL)
+        }
+        try fileManager.copyItem(at: sourceURL, to: targetURL)
+        return fileName
+    }
+
+    func localAudioURL(fileName: String) -> URL? {
+        let url = recordingsDirectory.appendingPathComponent(fileName)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 }
