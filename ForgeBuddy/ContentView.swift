@@ -1036,9 +1036,10 @@ struct LogoTile: View {
         ZStack {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(ForgeTheme.ink)
-            Circle()
-                .stroke(ForgeTheme.onInk, lineWidth: max(3, size * 0.08))
-                .frame(width: size * 0.38, height: size * 0.38)
+            Image(systemName: "hexagon.fill")
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(ForgeTheme.onInk)
+                .symbolRenderingMode(.monochrome)
         }
         .frame(width: size, height: size)
     }
