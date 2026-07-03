@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var pairing: PairingInfo?
     @Published var appearance: AppearanceMode = .system
     @Published var isConnected = false
+    @Published private(set) var isRefreshing = false
     @Published var statusText = "Offline"
     @Published var errorMessage: String?
 
@@ -69,11 +70,17 @@ final class AppModel: ObservableObject {
     }
 
     func refresh() async {
+        guard !isRefreshing else { return }
         guard let client else {
             isConnected = false
             statusText = "Not paired"
             return
         }
+
+        let previousFolders = folders
+        let previousNotes = notes
+        isRefreshing = true
+        defer { isRefreshing = false }
 
         do {
             statusText = "Syncing"
@@ -81,6 +88,7 @@ final class AppModel: ObservableObject {
             folders = snapshot.0
             notes = snapshot.1
             ensureFolderSelection()
+            reconcileNavigation(previousFolders: previousFolders, previousNotes: previousNotes)
             isConnected = true
             statusText = "Connected"
             errorMessage = nil
@@ -319,6 +327,132 @@ final class AppModel: ObservableObject {
         if folders.isEmpty {
             folders = [BuddyFolder(path: "Voice Notes", name: "Voice Notes", noteCount: 0)]
         }
+    }
+
+    private func reconcileNavigation(previousFolders: [BuddyFolder], previousNotes: [BuddyNote]) {
+        switch screen {
+        case .folder(let path):
+            if !folderExists(path) {
+                screen = remappedFolderPath(for: path, previousFolders: previousFolders, previousNotes: previousNotes)
+                    .map(AppScreen.folder) ?? .home
+            }
+        case .detail(let path):
+            if !noteExists(path) {
+                if let nextPath = remappedNotePath(for: path, previousNotes: previousNotes) {
+                    screen = .detail(nextPath)
+                } else {
+                    screen = .home
+                }
+            }
+        case .recording:
+            break
+        default:
+            break
+        }
+
+        switch sheet {
+        case .folderOptions(let path):
+            sheet = reconciledFolderSheet(.folderOptions(path), previousFolders: previousFolders, previousNotes: previousNotes)
+        case .renameFolder(let path):
+            sheet = reconciledFolderSheet(.renameFolder(path), previousFolders: previousFolders, previousNotes: previousNotes)
+        case .deleteFolder(let path):
+            sheet = reconciledFolderSheet(.deleteFolder(path), previousFolders: previousFolders, previousNotes: previousNotes)
+        case .moveNote(let path):
+            if !noteExists(path) {
+                sheet = remappedNotePath(for: path, previousNotes: previousNotes).map(BuddySheet.moveNote)
+            }
+        default:
+            break
+        }
+    }
+
+    private func reconciledFolderSheet(
+        _ current: BuddySheet,
+        previousFolders: [BuddyFolder],
+        previousNotes: [BuddyNote]
+    ) -> BuddySheet? {
+        let path: String
+        switch current {
+        case .folderOptions(let value), .renameFolder(let value), .deleteFolder(let value):
+            path = value
+        default:
+            return current
+        }
+
+        let nextPath: String?
+        if folderExists(path) {
+            nextPath = path
+        } else {
+            nextPath = remappedFolderPath(for: path, previousFolders: previousFolders, previousNotes: previousNotes)
+        }
+
+        guard let nextPath else { return nil }
+        switch current {
+        case .folderOptions:
+            return .folderOptions(nextPath)
+        case .renameFolder:
+            return .renameFolder(nextPath)
+        case .deleteFolder:
+            return .deleteFolder(nextPath)
+        default:
+            return current
+        }
+    }
+
+    private func remappedFolderPath(
+        for path: String,
+        previousFolders: [BuddyFolder],
+        previousNotes: [BuddyNote]
+    ) -> String? {
+        let previousPaths = Set(previousFolders.map(\.path))
+        let currentPaths = Set(folders.map(\.path))
+        let removedPaths = previousPaths.subtracting(currentPaths)
+        let addedPaths = currentPaths.subtracting(previousPaths)
+        if removedPaths.count == 1, removedPaths.contains(path), addedPaths.count == 1 {
+            return addedPaths.first
+        }
+
+        let oldNoteNames = Set(previousNotes
+            .filter { noteBelongs($0.folderPath, to: path) }
+            .map { Self.fileName($0.path) })
+        guard !oldNoteNames.isEmpty else { return nil }
+
+        let matchesByFolder = Dictionary(grouping: notes.filter { oldNoteNames.contains(Self.fileName($0.path)) }) {
+            $0.folderPath
+        }
+        return matchesByFolder
+            .filter { folderExists($0.key) }
+            .max { $0.value.count < $1.value.count }?
+            .key
+    }
+
+    private func remappedNotePath(for path: String, previousNotes: [BuddyNote]) -> String? {
+        guard let previous = previousNotes.first(where: { $0.path == path }) else { return nil }
+        let previousFileName = Self.fileName(previous.path)
+        return notes.first {
+            Self.fileName($0.path) == previousFileName &&
+            $0.recordedAt == previous.recordedAt &&
+            $0.title == previous.title
+        }?.path ?? notes.first {
+            Self.fileName($0.path) == previousFileName &&
+            $0.title == previous.title
+        }?.path
+    }
+
+    private func folderExists(_ path: String) -> Bool {
+        folders.contains { $0.path == path }
+    }
+
+    private func noteExists(_ path: String) -> Bool {
+        notes.contains { $0.path == path }
+    }
+
+    private func noteBelongs(_ folderPath: String, to path: String) -> Bool {
+        folderPath == path || folderPath.hasPrefix("\(path)/")
+    }
+
+    private static func fileName(_ path: String) -> String {
+        URL(fileURLWithPath: path).lastPathComponent
     }
 
     private func uniqueLocalFolderPath(_ name: String) -> String {

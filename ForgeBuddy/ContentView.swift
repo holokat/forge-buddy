@@ -265,6 +265,7 @@ struct FolderView: View {
                     .foregroundStyle(ForgeTheme.secondary)
                     .buttonStyle(PressButtonStyle())
                     Spacer()
+                    RefreshIconButton(size: 34)
                     IconButton(symbol: "ellipsis", size: 34) {
                         model.sheet = .folderOptions(folderPath)
                     }
@@ -435,18 +436,22 @@ struct NoteDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Button {
-                if let folderPath = note?.folderPath {
-                    model.screen = .folder(folderPath)
-                } else {
-                    model.screen = .home
+            HStack {
+                Button {
+                    if let folderPath = note?.folderPath {
+                        model.screen = .folder(folderPath)
+                    } else {
+                        model.screen = .home
+                    }
+                } label: {
+                    Label(folder?.name ?? "Folder", systemImage: "chevron.left")
+                        .font(.forgeBody(15, weight: .semibold))
                 }
-            } label: {
-                Label(folder?.name ?? "Folder", systemImage: "chevron.left")
-                    .font(.forgeBody(15, weight: .semibold))
+                .foregroundStyle(ForgeTheme.secondary)
+                .buttonStyle(PressButtonStyle())
+                Spacer()
+                RefreshIconButton(size: 34)
             }
-            .foregroundStyle(ForgeTheme.secondary)
-            .buttonStyle(PressButtonStyle())
 
             if let note {
                 Text("\(relativeTime(note.recordedAt)) · \(formatDuration(note.durationSeconds ?? 0))")
@@ -880,6 +885,8 @@ struct TopChrome: View {
             .frame(height: 30)
             .background(model.isConnected ? ForgeTheme.successTint : ForgeTheme.subtleSurface, in: Capsule())
 
+            RefreshIconButton(size: 34)
+
             IconButton(symbol: "gearshape", size: 34) {
                 model.screen = .settings
             }
@@ -1119,6 +1126,38 @@ struct IconButton: View {
                 )
         }
         .buttonStyle(PressButtonStyle())
+    }
+}
+
+struct RefreshIconButton: View {
+    @EnvironmentObject private var model: AppModel
+    var size: CGFloat = 40
+
+    var body: some View {
+        Button {
+            Task { await model.refresh() }
+        } label: {
+            ZStack {
+                if model.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(ForgeTheme.secondary)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: max(14, size * 0.4), weight: .semibold))
+                        .foregroundStyle(ForgeTheme.secondary)
+                }
+            }
+            .frame(width: size, height: size)
+            .background(ForgeTheme.subtleSurface, in: RoundedRectangle(cornerRadius: min(13, size * 0.29), style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: min(13, size * 0.29), style: .continuous)
+                    .stroke(ForgeTheme.border, lineWidth: 1)
+            )
+        }
+        .disabled(model.isRefreshing)
+        .buttonStyle(PressButtonStyle())
+        .accessibilityLabel("Refresh")
     }
 }
 
