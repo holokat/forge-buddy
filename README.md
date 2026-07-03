@@ -1,12 +1,50 @@
 # Forge Buddy
 
-Forge Buddy is the iOS companion app for Forge. It pairs with the desktop app, records voice notes, stores playable audio, transcribes recordings when speech recognition is available, and syncs notes and folders into the local Forge vault on the Mac.
+Forge Buddy is the iOS companion app for Forge. It records voice notes, transcribes them when speech recognition is available, and syncs the notes and audio back to a paired Forge desktop vault.
 
-## Build
+Forge Buddy is open source under the MIT License.
 
-Open `ForgeBuddy.xcodeproj` in Xcode, or generate it from `project.yml` with XcodeGen.
+## What Forge Buddy Can Do
+
+- Record voice notes on iPhone.
+- Save playable local audio.
+- Show transcripts after recording.
+- Keep recordings locally when the desktop app is unavailable.
+- Pair with Forge desktop by QR code.
+- Sync recordings, transcripts, and folders into Forge.
+- Create folders that can be reflected in the desktop vault.
+
+## Current Status
+
+Forge Buddy is early software. The recording, playback, transcription, local save, and Forge pairing foundations are in place, but the companion workflow is still being refined.
+
+Implemented foundations:
+
+- Native SwiftUI app.
+- Voice recording and playback.
+- Speech transcription.
+- Local recordings list.
+- QR-based pairing with Forge desktop.
+- Manual and automatic sync paths.
+- Folder creation support.
+
+Planned or in progress:
+
+- More reliable background/offline sync.
+- Better conflict handling.
+- More transcript management tools.
+- Stronger onboarding and connection status.
+- More tests and contributor documentation.
+
+## Development
+
+Open the Xcode project or generate it from `project.yml` with XcodeGen.
 
 ```bash
 xcodegen generate
 xcodebuild -project ForgeBuddy.xcodeproj -scheme ForgeBuddy -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
+
+## License
+
+MIT License. See `LICENSE`.
