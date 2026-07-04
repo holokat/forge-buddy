@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1F8A6E657B8D4B3195B77E4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6D7E5E2F8E0D4E1D8768A11A /* Assets.xcassets */; };
 		3F5406C274DA53A7598981B8 /* RecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968EE09BAA667E379D39244E /* RecorderService.swift */; };
 		83B859F5B31316441B85895A /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4FD261C32286078627DEB /* QRScannerView.swift */; };
 		88BC17161ABC652C800C3E06 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459AA93AD02E6B2B44B550EC /* Models.swift */; };
@@ -21,6 +22,7 @@
 /* Begin PBXFileReference section */
 		459AA93AD02E6B2B44B550EC /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5EB6DF84789D2AB38D1CE60E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		6D7E5E2F8E0D4E1D8768A11A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		968EE09BAA667E379D39244E /* RecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderService.swift; sourceTree = "<group>"; };
 		9ABD964B12D63CEAD25E3F97 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		9AD4FD261C32286078627DEB /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
@@ -37,6 +39,7 @@
 			isa = PBXGroup;
 			children = (
 				9ABD964B12D63CEAD25E3F97 /* AppModel.swift */,
+				6D7E5E2F8E0D4E1D8768A11A /* Assets.xcassets */,
 				D2CB7799B2B13174F785F656 /* BuddyAudioPlayer.swift */,
 				5EB6DF84789D2AB38D1CE60E /* ContentView.swift */,
 				C5694C65DBE906723B58ADDE /* ForgeBuddyApp.swift */,
@@ -74,6 +77,7 @@
 			buildConfigurationList = F76868213E62EB4BEE9498C9 /* Build configuration list for PBXNativeTarget "ForgeBuddy" */;
 			buildPhases = (
 				C2A357396E2AFD31372437E7 /* Sources */,
+				355A51C59C5A4EAFAB6827C3 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -120,6 +124,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		355A51C59C5A4EAFAB6827C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F8A6E657B8D4B3195B77E4F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		C2A357396E2AFD31372437E7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -146,13 +161,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				INFOPLIST_FILE = ForgeBuddy/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.forge.buddy;
 				PRODUCT_NAME = "Forge Buddy";
 				SDKROOT = iphoneos;
@@ -223,13 +238,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				INFOPLIST_FILE = ForgeBuddy/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.forge.buddy;
 				PRODUCT_NAME = "Forge Buddy";
 				SDKROOT = iphoneos;
