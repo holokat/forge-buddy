@@ -5,7 +5,7 @@ options:
     iOS: "17.0"
 settings:
   base:
-    DEVELOPMENT_TEAM: RZM8C5A33N
+    DEVELOPMENT_TEAM: 9LZ5TSWPZ9
     SWIFT_VERSION: 5.0
 targets:
   ForgeBuddy:

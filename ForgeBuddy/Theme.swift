@@ -16,6 +16,11 @@ enum ForgeTheme {
     static let rowHover = Color(light: 0xEBEBEE, dark: 0x2D2C27)
     static let border = Color(light: 0xE4E4E7, dark: 0x34332D)
     static let cardBorder = Color(light: 0xE7E7EA, dark: 0x302F29)
+    static let imageOutline = Color(UIColor { traitCollection in
+        traitCollection.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.10)
+            : UIColor.black.withAlphaComponent(0.10)
+    })
     static let successTint = Color(light: 0xE8F3EC, dark: 0x16281E)
     static let successBorder = Color(light: 0xCBE4D6, dark: 0x254634)
     static let destructiveTint = Color(light: 0xFBF0EF, dark: 0x2B1A18)

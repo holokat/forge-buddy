@@ -28,31 +28,46 @@ struct ForgeClient {
 
     func createNote(
         folderPath: String,
+        title: String,
         transcript: String,
+        kind: BuddyNoteKind,
+        tags: [String],
         audioURL: URL?,
-        durationSeconds: Double,
+        mediaURL: URL?,
+        durationSeconds: Double?,
         recordedAt: Date = Date()
     ) async throws -> BuddyNote {
         let audioData = try audioURL.map { try Data(contentsOf: $0) }
+        let mediaData = try mediaURL.map { try Data(contentsOf: $0) }
         let deviceName = await MainActor.run { UIDevice.current.name }
         let request = NoteRequest(
             path: nil,
             folderPath: folderPath,
             transcript: transcript,
-            title: Self.title(from: transcript),
+            title: title,
+            kind: kind.rawValue,
+            tags: tags,
             recordedAt: ISO8601DateFormatter.forge.string(from: recordedAt),
             durationSeconds: durationSeconds,
             deviceName: deviceName,
             audioBase64: audioData?.base64EncodedString(),
-            audioFileName: audioURL?.lastPathComponent
+            audioFileName: audioURL?.lastPathComponent,
+            mediaBase64: mediaData?.base64EncodedString(),
+            mediaFileName: mediaURL?.lastPathComponent
         )
         let body = try JSONEncoder().encode(request)
         let response: NoteResponse = try await send(path: "/api/buddy/notes/create", method: "POST", body: body)
         return response.note
     }
 
-    func updateNote(path: String, transcript: String) async throws -> BuddyNote {
-        let body = try JSONEncoder().encode(NoteRequest(path: path, folderPath: nil, transcript: transcript))
+    func updateNote(
+        path: String,
+        transcript: String? = nil,
+        title: String? = nil,
+        kind: BuddyNoteKind? = nil,
+        tags: [String]? = nil
+    ) async throws -> BuddyNote {
+        let body = try JSONEncoder().encode(NoteRequest(path: path, folderPath: nil, transcript: transcript, title: title, kind: kind?.rawValue, tags: tags))
         let response: NoteResponse = try await send(path: "/api/buddy/notes/update", method: "POST", body: body)
         return response.note
     }
@@ -75,6 +90,18 @@ struct ForgeClient {
         )
         components?.queryItems = [
             URLQueryItem(name: "path", value: audioPath),
+            URLQueryItem(name: "token", value: pairing.token)
+        ]
+        return components?.url
+    }
+
+    func mediaURL(path mediaPath: String) -> URL? {
+        var components = URLComponents(
+            url: pairing.baseURL.appendingPathComponent("api/buddy/media"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "path", value: mediaPath),
             URLQueryItem(name: "token", value: pairing.token)
         ]
         return components?.url
@@ -158,32 +185,44 @@ private struct NoteRequest: Encodable {
     var folderPath: String?
     var transcript: String?
     var title: String?
+    var kind: String?
+    var tags: [String]?
     var recordedAt: String?
     var durationSeconds: Double?
     var deviceName: String?
     var audioBase64: String?
     var audioFileName: String?
+    var mediaBase64: String?
+    var mediaFileName: String?
 
     init(
         path: String? = nil,
         folderPath: String? = nil,
         transcript: String? = nil,
         title: String? = nil,
+        kind: String? = nil,
+        tags: [String]? = nil,
         recordedAt: String? = nil,
         durationSeconds: Double? = nil,
         deviceName: String? = nil,
         audioBase64: String? = nil,
-        audioFileName: String? = nil
+        audioFileName: String? = nil,
+        mediaBase64: String? = nil,
+        mediaFileName: String? = nil
     ) {
         self.path = path
         self.folderPath = folderPath
         self.transcript = transcript
         self.title = title
+        self.kind = kind
+        self.tags = tags
         self.recordedAt = recordedAt
         self.durationSeconds = durationSeconds
         self.deviceName = deviceName
         self.audioBase64 = audioBase64
         self.audioFileName = audioFileName
+        self.mediaBase64 = mediaBase64
+        self.mediaFileName = mediaFileName
     }
 }
 

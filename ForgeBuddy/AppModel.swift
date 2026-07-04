@@ -145,6 +145,15 @@ final class AppModel: ObservableObject {
         return client?.audioURL(path: audioPath)
     }
 
+    func mediaURL(for note: BuddyNote) -> URL? {
+        if let localMediaFileName = note.localMediaFileName,
+           let localURL = store.localMediaURL(fileName: localMediaFileName) {
+            return localURL
+        }
+        guard let mediaPath = note.mediaPath else { return nil }
+        return client?.mediaURL(path: mediaPath)
+    }
+
     func createFolder(named rawName: String) async {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
@@ -206,14 +215,14 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func startRecording(folderPath: String) {
-        screen = .recording(folderPath)
+    func startRecording(folderPath: String, kind: BuddyNoteKind = .voice) {
+        screen = .recording(folderPath, kind)
         Task {
             await recorder.start()
         }
     }
 
-    func stopRecording(folderPath: String) async {
+    func stopRecording(folderPath: String, kind: BuddyNoteKind = .voice) async {
         guard let result = await recorder.stop() else {
             screen = .folder(folderPath)
             return
@@ -221,11 +230,18 @@ final class AppModel: ObservableObject {
 
         do {
             let localAudioFileName = try store.persistRecording(from: result.audioURL)
+            let title = kind == .agentTask
+                ? Self.title(from: result.transcript, fallback: "Agent Task")
+                : Self.title(from: result.transcript)
             let note = localNote(
                 folderPath: folderPath,
-                transcript: result.transcript,
+                title: title,
+                transcript: result.transcript.trimmingCharacters(in: .whitespacesAndNewlines),
+                kind: kind,
+                tags: kind.defaultTags,
                 duration: result.durationSeconds,
-                localAudioFileName: localAudioFileName
+                localAudioFileName: localAudioFileName,
+                localMediaFileName: nil
             )
             upsert(note: note)
             save()
@@ -257,12 +273,82 @@ final class AppModel: ObservableObject {
         }
 
         notes[index].transcript = transcript
-        notes[index].title = Self.title(from: transcript)
+        if notes[index].kind == .voice {
+            notes[index].title = Self.title(from: transcript)
+        }
         if notes[index].pendingAction != .create {
             notes[index].pendingAction = .update
         }
         notes[index].syncState = .pending
         save()
+        updateStatusText()
+    }
+
+    func createCaptureNote(
+        folderPath: String,
+        title rawTitle: String,
+        body rawBody: String,
+        kind: BuddyNoteKind,
+        tags rawTags: [String],
+        mediaData: Data? = nil,
+        mediaFileExtension: String? = nil
+    ) async {
+        let title = Self.normalizedTitle(rawTitle, fallback: Self.defaultTitle(for: kind))
+        let body = rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty || mediaData != nil else { return }
+
+        do {
+            let localMediaFileName = try mediaData.map {
+                try store.persistMedia(data: $0, preferredExtension: mediaFileExtension)
+            }
+            let note = localNote(
+                folderPath: folderPath,
+                title: title,
+                transcript: body,
+                kind: kind,
+                tags: Self.normalizedTags(rawTags, kind: kind),
+                duration: nil,
+                localAudioFileName: nil,
+                localMediaFileName: localMediaFileName
+            )
+            upsert(note: note)
+            save()
+            sheet = nil
+            screen = .folder(folderPath)
+            if pairing != nil {
+                await syncPending(showSuccess: false)
+            } else {
+                updateStatusText()
+            }
+        } catch {
+            errorMessage = "The note could not be saved locally: \(error.localizedDescription)"
+        }
+    }
+
+    func updateNoteTags(notePath: String, tags rawTags: [String]) async {
+        guard let index = notes.firstIndex(where: { $0.path == notePath }) else { return }
+        let tags = Self.normalizedTags(rawTags, kind: notes[index].kind)
+
+        if let client, !notes[index].needsSync {
+            do {
+                let note = try await client.updateNote(path: notePath, tags: tags)
+                upsert(note: note)
+                await refresh()
+                sheet = nil
+                return
+            } catch {
+                notes[index].lastSyncError = error.localizedDescription
+                errorMessage = "Tags saved locally. Sync when your Mac is reachable."
+            }
+        }
+
+        notes[index].tags = tags
+        if notes[index].pendingAction != .create {
+            notes[index].pendingAction = .update
+        }
+        notes[index].syncState = .pending
+        save()
+        sheet = nil
         updateStatusText()
     }
 
@@ -407,13 +493,17 @@ final class AppModel: ObservableObject {
         case .create:
             return try await client.createNote(
                 folderPath: note.folderPath,
+                title: note.title,
                 transcript: note.transcript,
+                kind: note.kind,
+                tags: note.tags,
                 audioURL: note.localAudioFileName.flatMap(store.localAudioURL(fileName:)),
-                durationSeconds: note.durationSeconds ?? 0,
+                mediaURL: note.localMediaFileName.flatMap(store.localMediaURL(fileName:)),
+                durationSeconds: note.durationSeconds,
                 recordedAt: note.recordedAt ?? Date()
             )
         case .update:
-            return try await client.updateNote(path: note.path, transcript: note.transcript)
+            return try await client.updateNote(path: note.path, transcript: note.transcript, title: note.title, kind: note.kind, tags: note.tags)
         case .move:
             return try await client.moveNote(path: note.path, folderPath: note.folderPath)
         }
@@ -445,6 +535,7 @@ final class AppModel: ObservableObject {
         var mergedNotes = remoteNotes.map { remote in
             var copy = remote
             copy.localAudioFileName = previousNotesByPath[remote.path]?.localAudioFileName
+            copy.localMediaFileName = previousNotesByPath[remote.path]?.localMediaFileName
             copy.syncState = .synced
             copy.pendingAction = nil
             copy.lastSyncError = nil
@@ -486,6 +577,7 @@ final class AppModel: ObservableObject {
     private func replaceLocalNote(path localPath: String, with remote: BuddyNote, preservingLocalAudioFrom local: BuddyNote) {
         var synced = remote
         synced.localAudioFileName = local.localAudioFileName
+        synced.localMediaFileName = local.localMediaFileName
         synced.syncState = .synced
         synced.pendingAction = nil
         synced.lastSyncError = nil
@@ -548,6 +640,9 @@ final class AppModel: ObservableObject {
             var next = note
             if next.localAudioFileName == nil {
                 next.localAudioFileName = notes[index].localAudioFileName
+            }
+            if next.localMediaFileName == nil {
+                next.localMediaFileName = notes[index].localMediaFileName
             }
             if next.syncState == .synced {
                 next.pendingAction = nil
@@ -719,21 +814,27 @@ final class AppModel: ObservableObject {
 
     private func localNote(
         folderPath: String,
+        title: String,
         transcript: String,
-        duration: Double,
-        localAudioFileName: String
+        kind: BuddyNoteKind,
+        tags: [String],
+        duration: Double?,
+        localAudioFileName: String?,
+        localMediaFileName: String?
     ) -> BuddyNote {
         let date = Date()
-        let title = Self.title(from: transcript)
         let fileName = "\(Self.pathDate(date)) \(Self.safeFileComponent(title)).md"
         return BuddyNote(
             path: uniqueLocalNotePath(folderPath: folderPath, fileName: fileName),
             folderPath: folderPath,
             title: title,
             transcript: transcript,
+            kind: kind,
+            tags: tags,
             recordedAt: date,
             durationSeconds: duration,
             localAudioFileName: localAudioFileName,
+            localMediaFileName: localMediaFileName,
             syncState: .pending,
             pendingAction: .create
         )
@@ -785,12 +886,44 @@ final class AppModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private static func title(from transcript: String) -> String {
+    private static func title(from transcript: String, fallback: String = "Voice Note") -> String {
         let title = transcript
             .split(whereSeparator: \.isWhitespace)
             .prefix(7)
             .joined(separator: " ")
-        return title.isEmpty ? "Voice Note" : title
+        return title.isEmpty ? fallback : title
+    }
+
+    private static func defaultTitle(for kind: BuddyNoteKind) -> String {
+        switch kind {
+        case .voice: return "Voice Note"
+        case .text: return "Text Note"
+        case .template: return "Template Note"
+        case .agentTask: return "Agent Task"
+        case .media: return "Media Note"
+        }
+    }
+
+    private static func normalizedTitle(_ value: String, fallback: String) -> String {
+        let title = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? fallback : title
+    }
+
+    private static func normalizedTags(_ tags: [String], kind: BuddyNoteKind) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for tag in kind.defaultTags + tags {
+            let cleaned = tag
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+                .lowercased()
+                .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
+                .replacingOccurrences(of: "[^a-z0-9_/-]", with: "", options: .regularExpression)
+            guard !cleaned.isEmpty, !seen.contains(cleaned) else { continue }
+            seen.insert(cleaned)
+            result.append(cleaned)
+        }
+        return result
     }
 
     private static func safeFileComponent(_ value: String) -> String {
@@ -833,6 +966,14 @@ private final class BuddyStore {
             .appendingPathComponent("Recordings", isDirectory: true)
     }
 
+    var mediaDirectory: URL {
+        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        return baseURL
+            .appendingPathComponent("Forge Buddy", isDirectory: true)
+            .appendingPathComponent("Media", isDirectory: true)
+    }
+
     func load() -> BuddyState {
         guard let data = defaults.data(forKey: key),
               let state = try? JSONDecoder().decode(BuddyState.self, from: data)
@@ -861,8 +1002,35 @@ private final class BuddyStore {
         return fileName
     }
 
+    func persistMedia(data: Data, preferredExtension: String?) throws -> String {
+        try fileManager.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
+        let ext = Self.safeMediaExtension(preferredExtension, data: data)
+        let fileName = "\(UUID().uuidString).\(ext)"
+        let targetURL = mediaDirectory.appendingPathComponent(fileName)
+        try data.write(to: targetURL, options: .atomic)
+        return fileName
+    }
+
     func localAudioURL(fileName: String) -> URL? {
         let url = recordingsDirectory.appendingPathComponent(fileName)
         return fileManager.fileExists(atPath: url.path) ? url : nil
+    }
+
+    func localMediaURL(fileName: String) -> URL? {
+        let url = mediaDirectory.appendingPathComponent(fileName)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private static func safeMediaExtension(_ preferredExtension: String?, data: Data) -> String {
+        let cleaned = (preferredExtension ?? "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: ". \n\t"))
+            .lowercased()
+        if ["jpg", "jpeg", "png", "gif", "heic", "webp"].contains(cleaned) {
+            return cleaned
+        }
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return "png" }
+        if data.starts(with: [0xFF, 0xD8, 0xFF]) { return "jpg" }
+        if data.starts(with: [0x47, 0x49, 0x46]) { return "gif" }
+        return "jpg"
     }
 }

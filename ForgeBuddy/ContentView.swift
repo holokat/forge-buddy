@@ -1,5 +1,7 @@
 import SwiftUI
+import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
@@ -20,8 +22,8 @@ struct ContentView: View {
                 HomeView()
             case .folder(let path):
                 FolderView(folderPath: path)
-            case .recording(let path):
-                RecordingView(folderPath: path)
+            case .recording(let path, let kind):
+                RecordingView(folderPath: path, kind: kind)
             case .detail(let path):
                 NoteDetailView(notePath: path)
             case .settings:
@@ -290,9 +292,10 @@ struct FolderView: View {
                     VStack(spacing: 8) {
                         Text("Nothing here yet")
                             .font(.forgeBody(16, weight: .semibold))
-                        Text("Record a note into this folder.")
+                        Text("Capture voice, text, templates, agent tasks, or media.")
                             .font(.forgeBody(14))
                             .foregroundStyle(ForgeTheme.soft)
+                            .multilineTextAlignment(.center)
                     }
                     Spacer()
                 } else {
@@ -311,26 +314,12 @@ struct FolderView: View {
             .padding(.horizontal, 24)
             .padding(.top, 18)
 
-            VStack(spacing: 12) {
-                RecordingChip(folderName: folder?.name ?? "Folder", color: ForgeTheme.folderColor(for: folderIndex))
-                Button {
-                    model.startRecording(folderPath: folderPath)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .stroke(ForgeTheme.ink.opacity(0.16), lineWidth: 9)
-                            .scaleEffect(pulse ? 1.26 : 1)
-                            .opacity(pulse ? 0 : 1)
-                            .animation(.easeOut(duration: 2.4).repeatForever(autoreverses: false), value: pulse)
-                        Circle().fill(ForgeTheme.ink)
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 30, weight: .semibold))
-                            .foregroundStyle(ForgeTheme.onInk)
-                    }
-                    .frame(width: 86, height: 86)
-                }
-                .buttonStyle(PressButtonStyle(pressedScale: 0.96))
-            }
+            CaptureDock(
+                folderPath: folderPath,
+                folderName: folder?.name ?? "Folder",
+                color: ForgeTheme.folderColor(for: folderIndex),
+                pulse: $pulse
+            )
             .padding(.bottom, 26)
             .frame(maxWidth: .infinity)
             .background(
@@ -348,12 +337,91 @@ struct FolderView: View {
     }
 }
 
+struct CaptureDock: View {
+    @EnvironmentObject private var model: AppModel
+    let folderPath: String
+    let folderName: String
+    let color: Color
+    @Binding var pulse: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            RecordingChip(folderName: folderName, color: color)
+            HStack(alignment: .center, spacing: 10) {
+                CaptureActionButton(title: "Text", symbol: "text.alignleft") {
+                    model.sheet = .textNote(folderPath)
+                }
+                CaptureActionButton(title: "Template", symbol: "square.on.square") {
+                    model.sheet = .templateNote(folderPath)
+                }
+                Button {
+                    model.startRecording(folderPath: folderPath)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .stroke(ForgeTheme.ink.opacity(0.16), lineWidth: 8)
+                            .scaleEffect(pulse ? 1.25 : 1)
+                            .opacity(pulse ? 0 : 1)
+                            .animation(.easeOut(duration: 2.4).repeatForever(autoreverses: false), value: pulse)
+                        Circle().fill(ForgeTheme.ink)
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 27, weight: .semibold))
+                            .foregroundStyle(ForgeTheme.onInk)
+                    }
+                    .frame(width: 76, height: 76)
+                    .accessibilityLabel("Record voice note")
+                }
+                .buttonStyle(PressButtonStyle(pressedScale: 0.96))
+                CaptureActionButton(title: "Agent", symbol: "sparkles") {
+                    model.startRecording(folderPath: folderPath, kind: .agentTask)
+                }
+                CaptureActionButton(title: "Photo", symbol: "photo") {
+                    model.sheet = .mediaNote(folderPath)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(ForgeTheme.background, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(ForgeTheme.border, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 22, y: 10)
+        }
+    }
+}
+
+struct CaptureActionButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 34)
+                Text(title)
+                    .font(.forgeBody(11.5, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(ForgeTheme.secondary)
+            .frame(width: 54, height: 58)
+            .background(ForgeTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(PressButtonStyle())
+    }
+}
+
 struct RecordingView: View {
     @EnvironmentObject private var model: AppModel
     let folderPath: String
+    let kind: BuddyNoteKind
 
     var body: some View {
-        RecordingContent(recorder: model.recorder, folderPath: folderPath)
+        RecordingContent(recorder: model.recorder, folderPath: folderPath, kind: kind)
     }
 }
 
@@ -361,13 +429,14 @@ private struct RecordingContent: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var recorder: RecorderService
     let folderPath: String
+    let kind: BuddyNoteKind
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 HStack(spacing: 8) {
                     BlinkingDot(color: ForgeTheme.red, size: 8)
-                    Text("Recording")
+                    Text(recordingTitle)
                         .font(.forgeBody(15, weight: .semibold))
                         .foregroundStyle(ForgeTheme.red)
                 }
@@ -378,12 +447,12 @@ private struct RecordingContent: View {
             }
 
             RecordingChip(
-                folderName: model.folder(path: folderPath)?.name ?? "Folder",
+                folderName: chipTitle,
                 color: ForgeTheme.folderColor(for: folderPath, folders: model.folders)
             )
 
             ScrollView {
-                Text(recorder.transcript.isEmpty ? "Listening... start speaking." : recorder.transcript)
+                Text(recorder.transcript.isEmpty ? emptyTranscriptText : recorder.transcript)
                     .font(.system(size: 22, weight: .regular))
                     .lineSpacing(7)
                     .foregroundStyle(recorder.transcript.isEmpty ? ForgeTheme.faint : ForgeTheme.text)
@@ -401,7 +470,7 @@ private struct RecordingContent: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                 Button {
-                    Task { await model.stopRecording(folderPath: folderPath) }
+                    Task { await model.stopRecording(folderPath: folderPath, kind: kind) }
                 } label: {
                     ZStack {
                         Circle()
@@ -420,6 +489,19 @@ private struct RecordingContent: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 22)
+    }
+
+    private var recordingTitle: String {
+        kind == .agentTask ? "Recording agent task" : "Recording"
+    }
+
+    private var chipTitle: String {
+        let folder = model.folder(path: folderPath)?.name ?? "Folder"
+        return kind == .agentTask ? "Agent task to \(folder)" : folder
+    }
+
+    private var emptyTranscriptText: String {
+        kind == .agentTask ? "Describe the task for the agent..." : "Listening... start speaking."
     }
 }
 
@@ -454,9 +536,27 @@ struct NoteDetailView: View {
             }
 
             if let note {
-                Text("\(relativeTime(note.recordedAt)) · \(formatDuration(note.durationSeconds ?? 0))")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(note.title)
+                        .font(.forgeTitle(27))
+                        .tracking(-0.6)
+                        .lineLimit(2)
+                    HStack(spacing: 8) {
+                        Label(note.kind.label, systemImage: note.kind.symbol)
+                        Text("·")
+                        Text(relativeTime(note.recordedAt))
+                        if let duration = note.durationSeconds {
+                            Text("·")
+                            Text(formatDuration(duration))
+                        }
+                    }
                     .font(.forgeBody(13, weight: .medium))
                     .foregroundStyle(ForgeTheme.faint)
+                }
+
+                NoteTagRow(tags: note.tags) {
+                    model.sheet = .editTags(note.path)
+                }
 
                 if let audioURL = model.audioURL(for: note) {
                     AudioPlaybackCard(
@@ -464,6 +564,10 @@ struct NoteDetailView: View {
                         duration: note.durationSeconds,
                         player: audioPlayer
                     )
+                }
+
+                if let mediaURL = model.mediaURL(for: note) {
+                    MediaPreviewCard(url: mediaURL)
                 }
 
                 if editing {
@@ -572,6 +676,94 @@ struct AudioPlaybackCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(ForgeTheme.border, lineWidth: 1)
         )
+    }
+}
+
+struct MediaPreviewCard: View {
+    let url: URL
+
+    var body: some View {
+        Group {
+            if url.isFileURL, let image = UIImage(contentsOfFile: url.path) {
+                imageView(Image(uiImage: image))
+            } else {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .tint(ForgeTheme.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 190)
+                    case .success(let image):
+                        imageView(image)
+                    case .failure:
+                        unavailable
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ForgeTheme.imageOutline, lineWidth: 1)
+        )
+    }
+
+    private func imageView(_ image: Image) -> some View {
+        image
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity)
+            .frame(height: 210)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var unavailable: some View {
+        Label("Media preview unavailable", systemImage: "photo")
+            .font(.forgeBody(14, weight: .semibold))
+            .foregroundStyle(ForgeTheme.soft)
+            .frame(maxWidth: .infinity)
+            .frame(height: 120)
+            .background(ForgeTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+struct NoteTagRow: View {
+    let tags: [String]
+    let editAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if tags.isEmpty {
+                Text("No tags")
+                    .font(.forgeBody(12.5, weight: .medium))
+                    .foregroundStyle(ForgeTheme.faint)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.forgeBody(12, weight: .semibold))
+                                .foregroundStyle(ForgeTheme.secondary)
+                                .padding(.horizontal, 9)
+                                .frame(height: 28)
+                                .background(ForgeTheme.chip, in: Capsule())
+                        }
+                    }
+                }
+            }
+            Spacer(minLength: 6)
+            Button(action: editAction) {
+                Label("Tags", systemImage: "tag")
+                    .font(.forgeBody(12.5, weight: .semibold))
+                    .foregroundStyle(ForgeTheme.secondary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(ForgeTheme.subtleSurface, in: Capsule())
+            }
+            .buttonStyle(PressButtonStyle())
+        }
     }
 }
 
@@ -737,6 +929,18 @@ struct SheetHost: View {
         case .deleteFolder(let path):
             DeleteFolderSheet(folderPath: path)
                 .presentationDetents([.height(250)])
+        case .textNote(let path):
+            TextNoteSheet(folderPath: path)
+                .presentationDetents([.large])
+        case .templateNote(let path):
+            TemplateNoteSheet(folderPath: path)
+                .presentationDetents([.large])
+        case .mediaNote(let path):
+            MediaNoteSheet(folderPath: path)
+                .presentationDetents([.large])
+        case .editTags(let path):
+            EditTagsSheet(notePath: path)
+                .presentationDetents([.height(260)])
         }
     }
 }
@@ -816,6 +1020,196 @@ struct DeleteFolderSheet: View {
                         .background(ForgeTheme.red, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(PressButtonStyle())
+            }
+        }
+    }
+}
+
+struct TextNoteSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let folderPath: String
+    @State private var title = ""
+    @State private var bodyText = ""
+    @State private var tags = "text"
+
+    var body: some View {
+        SheetScaffold(title: "Text note") {
+            SheetField("Title", text: $title, placeholder: "Optional title")
+            SheetTextArea(title: "Note", text: $bodyText, placeholder: "Capture the thought...")
+            SheetField("Tags", text: $tags, placeholder: "text, idea")
+            HStack(spacing: 10) {
+                SecondaryButton(title: "Cancel") { dismiss() }
+                PrimaryButton(title: "Save") {
+                    Task {
+                        await model.createCaptureNote(
+                            folderPath: folderPath,
+                            title: title,
+                            body: bodyText,
+                            kind: .text,
+                            tags: splitTags(tags)
+                        )
+                    }
+                }
+                .disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+}
+
+struct TemplateNoteSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let folderPath: String
+    @State private var selected = CaptureTemplate.templates[0]
+    @State private var title = ""
+    @State private var notes = ""
+    @State private var tags = "template"
+
+    var body: some View {
+        SheetScaffold(title: "Start from template") {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(CaptureTemplate.templates) { template in
+                        Button {
+                            selected = template
+                            if title.isEmpty {
+                                title = template.title
+                            }
+                        } label: {
+                            TemplateChoiceCard(template: template, isSelected: selected.id == template.id)
+                        }
+                        .buttonStyle(PressButtonStyle(pressedScale: 0.98))
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            SheetField("Title", text: $title, placeholder: selected.title)
+            SheetTextArea(title: "Extra notes", text: $notes, placeholder: "Optional context to include...")
+            SheetField("Tags", text: $tags, placeholder: "template, meeting")
+            HStack(spacing: 10) {
+                SecondaryButton(title: "Cancel") { dismiss() }
+                PrimaryButton(title: "Create") {
+                    Task {
+                        await model.createCaptureNote(
+                            folderPath: folderPath,
+                            title: title.isEmpty ? selected.title : title,
+                            body: selected.markdown(extra: notes),
+                            kind: .template,
+                            tags: splitTags(tags + ", \(selected.defaultTag)")
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct MediaNoteSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let folderPath: String
+    @State private var title = ""
+    @State private var caption = ""
+    @State private var tags = "media"
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var imageData: Data?
+    @State private var imageExtension = "jpg"
+    @State private var loading = false
+
+    var body: some View {
+        SheetScaffold(title: "Media note") {
+            PhotosPicker(selection: $selectedItem, matching: .images) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(ForgeTheme.subtleSurface)
+                    if let imageData, let image = UIImage(data: imageData) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 190)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    } else {
+                        VStack(spacing: 10) {
+                            Image(systemName: loading ? "hourglass" : "photo.badge.plus")
+                                .font(.system(size: 30, weight: .semibold))
+                            Text(loading ? "Loading..." : "Choose image")
+                                .font(.forgeBody(15, weight: .semibold))
+                        }
+                        .foregroundStyle(ForgeTheme.soft)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 190)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(ForgeTheme.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(PressButtonStyle())
+            .onChange(of: selectedItem) { _, item in
+                Task { await loadImage(from: item) }
+            }
+
+            SheetField("Title", text: $title, placeholder: "Optional title")
+            SheetTextArea(title: "Caption", text: $caption, placeholder: "What should Forge remember about this?")
+            SheetField("Tags", text: $tags, placeholder: "media, reference")
+            HStack(spacing: 10) {
+                SecondaryButton(title: "Cancel") { dismiss() }
+                PrimaryButton(title: "Save") {
+                    Task {
+                        await model.createCaptureNote(
+                            folderPath: folderPath,
+                            title: title,
+                            body: caption,
+                            kind: .media,
+                            tags: splitTags(tags),
+                            mediaData: imageData,
+                            mediaFileExtension: imageExtension
+                        )
+                    }
+                }
+                .disabled(imageData == nil && caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private func loadImage(from item: PhotosPickerItem?) async {
+        guard let item else {
+            imageData = nil
+            return
+        }
+        loading = true
+        defer { loading = false }
+        imageExtension = item.supportedContentTypes
+            .first(where: { $0.conforms(to: .image) })?
+            .preferredFilenameExtension ?? "jpg"
+        imageData = try? await item.loadTransferable(type: Data.self)
+    }
+}
+
+struct EditTagsSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let notePath: String
+    @State private var tags = ""
+
+    var body: some View {
+        SheetScaffold(title: "Tags") {
+            SheetField("Tags", text: $tags, placeholder: "voice, idea, follow-up")
+                .onAppear {
+                    tags = model.note(path: notePath)?.tags.joined(separator: ", ") ?? ""
+                }
+            Text("Use commas or spaces. Forge writes tags as Markdown hashtags so agents can discover them.")
+                .font(.forgeBody(13))
+                .foregroundStyle(ForgeTheme.soft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                SecondaryButton(title: "Cancel") { dismiss() }
+                PrimaryButton(title: "Save") {
+                    Task { await model.updateNoteTags(notePath: notePath, tags: splitTags(tags)) }
+                }
             }
         }
     }
@@ -905,6 +1299,159 @@ struct ManualPairingSheet: View {
             }
         }
     }
+}
+
+struct SheetField: View {
+    let title: String
+    @Binding var text: String
+    let placeholder: String
+
+    init(_ title: String, text: Binding<String>, placeholder: String) {
+        self.title = title
+        self._text = text
+        self.placeholder = placeholder
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.forgeBody(12.5, weight: .semibold))
+                .foregroundStyle(ForgeTheme.faint)
+            TextField(placeholder, text: $text)
+                .textInputAutocapitalization(.sentences)
+                .font(.forgeBody(15, weight: .medium))
+                .padding(.horizontal, 14)
+                .frame(height: 46)
+                .background(ForgeTheme.chip, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+}
+
+struct SheetTextArea: View {
+    let title: String
+    @Binding var text: String
+    let placeholder: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.forgeBody(12.5, weight: .semibold))
+                .foregroundStyle(ForgeTheme.faint)
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.forgeBody(15))
+                        .foregroundStyle(ForgeTheme.faint)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                }
+                TextEditor(text: $text)
+                    .font(.forgeBody(15))
+                    .lineSpacing(4)
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+            }
+            .frame(minHeight: 118)
+            .background(ForgeTheme.chip, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+}
+
+struct CaptureTemplate: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let defaultTag: String
+    let sections: [String]
+
+    func markdown(extra: String) -> String {
+        var lines = sections.flatMap { section in
+            ["## \(section)", "", "- ", ""]
+        }
+        let trimmedExtra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedExtra.isEmpty {
+            lines.append(contentsOf: ["## Capture notes", "", trimmedExtra, ""])
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static let templates = [
+        CaptureTemplate(
+            id: "daily",
+            title: "Daily note",
+            subtitle: "Log, decisions, follow-ups",
+            symbol: "calendar",
+            defaultTag: "daily",
+            sections: ["Focus", "Log", "Decisions", "Follow-ups"]
+        ),
+        CaptureTemplate(
+            id: "meeting",
+            title: "Meeting notes",
+            subtitle: "Agenda, decisions, actions",
+            symbol: "person.2",
+            defaultTag: "meeting",
+            sections: ["Agenda", "Notes", "Decisions", "Action items"]
+        ),
+        CaptureTemplate(
+            id: "idea",
+            title: "Idea",
+            subtitle: "Spark, why it matters, next step",
+            symbol: "lightbulb",
+            defaultTag: "idea",
+            sections: ["Idea", "Why it matters", "Next step"]
+        ),
+        CaptureTemplate(
+            id: "source",
+            title: "Source note",
+            subtitle: "Reference, excerpts, takeaways",
+            symbol: "bookmark",
+            defaultTag: "source",
+            sections: ["Source", "Key excerpts", "Takeaways", "Links"]
+        )
+    ]
+}
+
+struct TemplateChoiceCard: View {
+    let template: CaptureTemplate
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Image(systemName: template.symbol)
+                    .font(.system(size: 17, weight: .semibold))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(ForgeTheme.green)
+                }
+            }
+            Text(template.title)
+                .font(.forgeBody(15, weight: .semibold))
+                .lineLimit(1)
+            Text(template.subtitle)
+                .font(.forgeBody(12.5, weight: .medium))
+                .foregroundStyle(ForgeTheme.soft)
+                .lineLimit(2)
+        }
+        .foregroundStyle(isSelected ? ForgeTheme.text : ForgeTheme.secondary)
+        .padding(12)
+        .frame(width: 162, height: 122, alignment: .topLeading)
+        .background(isSelected ? ForgeTheme.background : ForgeTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isSelected ? ForgeTheme.ink : ForgeTheme.border, lineWidth: isSelected ? 1.5 : 1)
+        )
+    }
+}
+
+func splitTags(_ value: String) -> [String] {
+    value
+        .split { $0 == "," || $0 == " " || $0 == "\n" || $0 == "\t" }
+        .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: "# \n\t")) }
+        .filter { !$0.isEmpty }
 }
 
 struct TopChrome: View {
@@ -1059,27 +1606,42 @@ struct NoteRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: "doc.text")
+                Image(systemName: note.kind.symbol)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(ForgeTheme.tertiary)
                     .frame(width: 22)
-                Text(note.transcript.isEmpty ? note.title : note.transcript)
-                    .font(.forgeBody(15, weight: .medium))
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(note.title)
+                        .font(.forgeBody(15, weight: .medium))
+                        .lineLimit(1)
+                    if !note.transcript.isEmpty {
+                        Text(note.transcript)
+                            .font(.forgeBody(12.5, weight: .medium))
+                            .foregroundStyle(ForgeTheme.soft)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer()
                 if note.needsSync {
                     SyncBadge(state: note.syncState)
                 }
-                Text("\(relativeTime(note.recordedAt)) · \(formatDuration(note.durationSeconds ?? 0))")
+                Text(rowMeta)
                     .font(.forgeBody(12.5, weight: .medium))
                     .foregroundStyle(ForgeTheme.faint)
                     .lineLimit(1)
             }
             .padding(.horizontal, 10)
-            .frame(height: 42)
+            .frame(height: 54)
         }
         .foregroundStyle(ForgeTheme.text)
         .buttonStyle(RowButtonStyle())
+    }
+
+    private var rowMeta: String {
+        if let duration = note.durationSeconds {
+            return "\(relativeTime(note.recordedAt)) · \(formatDuration(duration))"
+        }
+        return "\(relativeTime(note.recordedAt)) · \(note.kind.label)"
     }
 }
 

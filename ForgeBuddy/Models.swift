@@ -65,15 +65,57 @@ enum BuddyPendingAction: String, Codable, Hashable {
     case move
 }
 
+enum BuddyNoteKind: String, Codable, CaseIterable, Hashable {
+    case voice
+    case text
+    case template
+    case agentTask
+    case media
+
+    var label: String {
+        switch self {
+        case .voice: return "Voice"
+        case .text: return "Text"
+        case .template: return "Template"
+        case .agentTask: return "Agent task"
+        case .media: return "Media"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .voice: return "mic.fill"
+        case .text: return "text.alignleft"
+        case .template: return "square.on.square"
+        case .agentTask: return "sparkles"
+        case .media: return "photo"
+        }
+    }
+
+    var defaultTags: [String] {
+        switch self {
+        case .voice: return ["voice"]
+        case .text: return ["text"]
+        case .template: return ["template"]
+        case .agentTask: return ["agent", "work-order"]
+        case .media: return ["media"]
+        }
+    }
+}
+
 struct BuddyNote: Identifiable, Codable, Hashable {
     var path: String
     var folderPath: String
     var title: String
     var transcript: String
+    var kind: BuddyNoteKind
+    var tags: [String]
     var recordedAt: Date?
     var durationSeconds: Double?
     var audioPath: String?
     var localAudioFileName: String?
+    var mediaPath: String?
+    var localMediaFileName: String?
     var syncState: BuddySyncState
     var pendingAction: BuddyPendingAction?
     var lastSyncError: String?
@@ -86,10 +128,14 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         folderPath: String,
         title: String,
         transcript: String,
+        kind: BuddyNoteKind = .voice,
+        tags: [String] = [],
         recordedAt: Date? = nil,
         durationSeconds: Double? = nil,
         audioPath: String? = nil,
         localAudioFileName: String? = nil,
+        mediaPath: String? = nil,
+        localMediaFileName: String? = nil,
         syncState: BuddySyncState = .synced,
         pendingAction: BuddyPendingAction? = nil,
         lastSyncError: String? = nil
@@ -98,10 +144,14 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         self.folderPath = folderPath
         self.title = title
         self.transcript = transcript
+        self.kind = kind
+        self.tags = tags
         self.recordedAt = recordedAt
         self.durationSeconds = durationSeconds
         self.audioPath = audioPath
         self.localAudioFileName = localAudioFileName
+        self.mediaPath = mediaPath
+        self.localMediaFileName = localMediaFileName
         self.syncState = syncState
         self.pendingAction = pendingAction
         self.lastSyncError = lastSyncError
@@ -112,10 +162,14 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         case folderPath
         case title
         case transcript
+        case kind
+        case tags
         case recordedAt
         case durationSeconds
         case audioPath
         case localAudioFileName
+        case mediaPath
+        case localMediaFileName
         case syncState
         case pendingAction
         case lastSyncError
@@ -127,8 +181,12 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         folderPath = try container.decodeIfPresent(String.self, forKey: .folderPath) ?? ""
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
         transcript = try container.decodeIfPresent(String.self, forKey: .transcript) ?? ""
+        kind = try container.decodeIfPresent(BuddyNoteKind.self, forKey: .kind) ?? .voice
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? kind.defaultTags
         audioPath = try container.decodeIfPresent(String.self, forKey: .audioPath)
         localAudioFileName = try container.decodeIfPresent(String.self, forKey: .localAudioFileName)
+        mediaPath = try container.decodeIfPresent(String.self, forKey: .mediaPath)
+        localMediaFileName = try container.decodeIfPresent(String.self, forKey: .localMediaFileName)
         durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds)
         syncState = try container.decodeIfPresent(BuddySyncState.self, forKey: .syncState) ?? .synced
         pendingAction = try container.decodeIfPresent(BuddyPendingAction.self, forKey: .pendingAction)
@@ -146,9 +204,13 @@ struct BuddyNote: Identifiable, Codable, Hashable {
         try container.encode(folderPath, forKey: .folderPath)
         try container.encode(title, forKey: .title)
         try container.encode(transcript, forKey: .transcript)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(durationSeconds, forKey: .durationSeconds)
         try container.encodeIfPresent(audioPath, forKey: .audioPath)
         try container.encodeIfPresent(localAudioFileName, forKey: .localAudioFileName)
+        try container.encodeIfPresent(mediaPath, forKey: .mediaPath)
+        try container.encodeIfPresent(localMediaFileName, forKey: .localMediaFileName)
         try container.encode(syncState, forKey: .syncState)
         try container.encodeIfPresent(pendingAction, forKey: .pendingAction)
         try container.encodeIfPresent(lastSyncError, forKey: .lastSyncError)
@@ -249,7 +311,7 @@ enum AppScreen: Equatable {
     case paired
     case home
     case folder(String)
-    case recording(String)
+    case recording(String, BuddyNoteKind)
     case detail(String)
     case settings
 }
@@ -260,6 +322,10 @@ enum BuddySheet: Identifiable, Equatable {
     case folderOptions(String)
     case renameFolder(String)
     case deleteFolder(String)
+    case textNote(String)
+    case templateNote(String)
+    case mediaNote(String)
+    case editTags(String)
 
     var id: String {
         switch self {
@@ -273,6 +339,14 @@ enum BuddySheet: Identifiable, Equatable {
             return "rename-\(path)"
         case .deleteFolder(let path):
             return "delete-\(path)"
+        case .textNote(let path):
+            return "text-note-\(path)"
+        case .templateNote(let path):
+            return "template-note-\(path)"
+        case .mediaNote(let path):
+            return "media-note-\(path)"
+        case .editTags(let path):
+            return "edit-tags-\(path)"
         }
     }
 }

@@ -7,6 +7,11 @@ Forge Buddy is open source under the MIT License.
 ## What Forge Buddy Can Do
 
 - Record voice notes on iPhone.
+- Capture quick text notes.
+- Start Markdown notes from lightweight templates.
+- Record agent task briefs as Markdown work orders.
+- Attach image media notes from the photo picker.
+- Add and edit note tags for later sorting in Forge.
 - Save playable local audio.
 - Show transcripts after recording.
 - Keep recordings locally when the desktop app is unavailable.
@@ -22,6 +27,7 @@ Implemented foundations:
 
 - Native SwiftUI app.
 - Voice recording and playback.
+- Text, template, voice-recorded agent task, and media capture flows.
 - Speech transcription.
 - Local recordings list.
 - QR-based pairing with Forge desktop.
@@ -32,7 +38,7 @@ Planned or in progress:
 
 - More reliable background/offline sync.
 - Better conflict handling.
-- More transcript management tools.
+- More transcript and capture management tools.
 - Stronger onboarding and connection status.
 - More tests and contributor documentation.
 
